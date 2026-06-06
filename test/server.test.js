@@ -196,6 +196,36 @@ test('api rejects non-object explicit project payloads on project-reading routes
   }
 });
 
+test('api rejects sparse explicit project payloads on project-reading routes', async () => {
+  const app = await startApp();
+  try {
+    const project = (await requestJson(app.baseUrl, '/api/project')).body;
+    for (const [pathname, body] of [
+      ['/api/assist', { task: 'brainstorm', project: { title: 'Sparse Assist' } }],
+      ['/api/export', { project: { title: 'Sparse Export' } }],
+      ['/api/snapshot', { project: { title: 'Sparse Snapshot' } }],
+      ['/api/settle', {
+        project: { title: 'Sparse Settle' },
+        chapter: { id: 'sparse-settle', title: '稀疏项目结算', body: '林澈看见电梯按钮亮起。' }
+      }]
+    ]) {
+      const response = await requestJson(app.baseUrl, pathname, {
+        method: 'POST',
+        body: JSON.stringify(body)
+      });
+      assert.equal(response.status, 400);
+      assert.match(response.body.error, /complete project data/);
+    }
+
+    const saved = JSON.parse(await readFile(path.join(app.dataDir, 'project.json'), 'utf8'));
+    assert.equal(saved.title, project.title);
+    assert.equal(saved.versionToken, project.versionToken);
+    assert.equal(saved.chapters.length, 0);
+  } finally {
+    await app.stop();
+  }
+});
+
 test('api rejects malformed assist payload and model config shapes', async () => {
   const app = await startApp();
   try {

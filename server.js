@@ -134,7 +134,7 @@ async function handleApi(request, response) {
 
   if (request.method === 'POST' && url.pathname === '/api/settle') {
     const body = await readJson(request);
-    const explicitProject = readExplicitProjectPayload(body);
+    const explicitProject = readCompleteExplicitProjectPayload(body);
     const chapter = readChapterSettlementPayload(body);
     const result = await settleProjectIfVersion(explicitProject || await loadProject(), chapter, {
       expectedVersionToken: body.expectedVersionToken ?? explicitProject?.versionToken,
@@ -313,7 +313,7 @@ function readProjectSavePayload(body) {
 }
 
 async function readOptionalProjectPayload(body) {
-  return readExplicitProjectPayload(body) || await loadProject();
+  return readCompleteExplicitProjectPayload(body) || await loadProject();
 }
 
 function readExplicitProjectPayload(body) {
@@ -322,6 +322,12 @@ function readExplicitProjectPayload(body) {
     throw new HttpError(400, 'Project payload must be an object.');
   }
   return body.project;
+}
+
+function readCompleteExplicitProjectPayload(body) {
+  const project = readExplicitProjectPayload(body);
+  if (project) assertCompleteProjectPayload(project);
+  return project;
 }
 
 function readChapterSettlementPayload(body) {
