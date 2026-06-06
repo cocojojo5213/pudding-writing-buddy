@@ -620,6 +620,21 @@ test('api normalizes model config before proxying requests', async () => {
     assert.equal(defaultResponse.status, 200);
     assert.equal(proxiedRequests[2].body.temperature, 0.75);
     assert.equal(proxiedRequests[2].body.max_tokens, 3500);
+
+    const fullEndpointResponse = await requestJson(app.baseUrl, '/api/assist', {
+      method: 'POST',
+      body: JSON.stringify({
+        task: 'plan',
+        modelConfig: {
+          baseUrl: `${model.baseUrl}/v1/chat/completions/`,
+          apiKey: 'test-key',
+          model: 'test-model'
+        }
+      })
+    });
+
+    assert.equal(fullEndpointResponse.status, 200);
+    assert.equal(proxiedRequests[3].url, '/v1/chat/completions');
   } finally {
     await app.stop();
     await model.stop();

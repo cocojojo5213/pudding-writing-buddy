@@ -537,7 +537,8 @@ function buildModelEndpoint(baseUrlValue) {
   if (url.search || url.hash) {
     throw new HttpError(400, 'Model base URL must not include query strings or fragments.');
   }
-  url.pathname = `${url.pathname.replace(/\/+$/, '')}/chat/completions`;
+  const pathname = url.pathname.replace(/\/+$/, '');
+  url.pathname = pathname.endsWith('/chat/completions') ? pathname : `${pathname}/chat/completions`;
   return url.toString();
 }
 
