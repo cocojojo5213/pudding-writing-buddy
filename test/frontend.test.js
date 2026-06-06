@@ -927,25 +927,88 @@ test('locked form edits and removes cannot pollute generated saves', async () =>
   await import(`${moduleUrl.href}?frontend-test=${Date.now()}`);
   await waitFor(() => dom.byId('save-state').textContent === 'Ready');
   await waitFor(() => dom.removeButtons('characters').length === originalCharacterCount);
+  await waitFor(() => dom.collectionInputs('characters', 'name').length === originalCharacterCount);
 
   dom.byId('plan').click();
   await waitFor(() => Boolean(releaseAssist));
   assert.equal(dom.byId('title').disabled, true);
   assert.equal(dom.byId('chapterBody').disabled, true);
   assert.equal(dom.removeButtons('characters')[0].disabled, true);
+  assert.equal(dom.collectionInputs('characters', 'name')[0].disabled, true);
 
   dom.byId('title').value = 'Injected Locked Title';
   dom.byId('title').dispatchEvent({ type: 'input' });
   dom.byId('chapterBody').value = '锁内脚本输入不应进入保存。';
   dom.byId('chapterBody').dispatchEvent({ type: 'input' });
+  dom.collectionInputs('characters', 'name')[0].value = '锁内脚本人物名';
+  dom.collectionInputs('characters', 'name')[0].dispatchEvent({ type: 'input' });
   dom.removeButtons('characters')[0].click();
   releaseAssist();
 
   await waitFor(() => savePayloads.length === 1 && dom.byId('save-state').textContent === 'Saved');
   assert.equal(savePayloads[0].project.title, 'Original Locked Title');
   assert.equal(savePayloads[0].project.chapters[0].body, '原始正文不能被锁内输入覆盖。');
+  assert.equal(savePayloads[0].project.characters[0].name, '林澈');
   assert.equal(savePayloads[0].project.characters.length, originalCharacterCount);
   assert.match(savePayloads[0].project.chapters[0].plan, /锁内表单/);
+});
+
+test('collection field edits are saved with current form values', async () => {
+  const dom = createDomHarness();
+  const savedPayloads = [];
+  let project = {
+    ...createDefaultProject(),
+    timeline: [{
+      id: 'timeline-with-source-links',
+      source: 'settlement',
+      chapterId: 'chapter-1',
+      chapter: '第1章',
+      event: '旧事件',
+      consequence: '旧后果'
+    }]
+  };
+
+  globalThis.document = dom.document;
+  globalThis.window = dom.window;
+  globalThis.localStorage = createStorage();
+  globalThis.fetch = async (requestPath, options = {}) => {
+    if (requestPath === '/api/project' && options.method === 'POST') {
+      const payload = JSON.parse(options.body);
+      savedPayloads.push(payload);
+      project = {
+        ...payload.project,
+        versionToken: `collection-save-token-${savedPayloads.length}`,
+        updatedAt: `2026-06-07T00:00:4${savedPayloads.length}.000Z`
+      };
+      return jsonResponse(project);
+    }
+    if (requestPath === '/api/project') return jsonResponse(project);
+    throw new Error(`Unexpected fetch: ${requestPath}`);
+  };
+
+  const moduleUrl = pathToFileURL(path.join(APP_ROOT, 'public/app.js'));
+  await import(`${moduleUrl.href}?frontend-test=${Date.now()}`);
+  await waitFor(() => dom.byId('save-state').textContent === 'Ready');
+  await waitFor(() => dom.collectionInputs('characters', 'name').length === 2);
+
+  dom.collectionInputs('characters', 'name')[0].value = '林澈（已校准）';
+  dom.collectionInputs('characters', 'name')[0].dispatchEvent({ type: 'input' });
+  dom.collectionInputs('characters', 'knowledge')[0].value = '知道缴费单来自未来病历系统。';
+  dom.collectionInputs('characters', 'knowledge')[0].dispatchEvent({ type: 'input' });
+  dom.collectionInputs('hooks', 'status')[0].value = 'resolved';
+  dom.collectionInputs('hooks', 'status')[0].dispatchEvent({ type: 'change' });
+  dom.collectionInputs('timeline', 'event')[0].value = '林澈核验缴费单编号。';
+  dom.collectionInputs('timeline', 'event')[0].dispatchEvent({ type: 'input' });
+  dom.byId('save-project').click();
+
+  await waitFor(() => savedPayloads.length === 1 && dom.byId('save-state').textContent === 'Saved');
+
+  assert.equal(savedPayloads[0].project.characters[0].name, '林澈（已校准）');
+  assert.equal(savedPayloads[0].project.characters[0].knowledge, '知道缴费单来自未来病历系统。');
+  assert.equal(savedPayloads[0].project.hooks[0].status, 'resolved');
+  assert.equal(savedPayloads[0].project.timeline[0].event, '林澈核验缴费单编号。');
+  assert.equal(savedPayloads[0].project.timeline[0].source, '');
+  assert.equal(savedPayloads[0].project.timeline[0].chapterId, '');
 });
 
 function jsonResponse(body, status = 200) {
@@ -978,6 +1041,7 @@ function createDomHarness(options = {}) {
   const allElements = [];
   let chapterButtons = [];
   const removeButtonsByContainer = new Map();
+  const collectionControlsByContainer = new Map();
 
   const register = (element) => {
     allElements.push(element);
@@ -1053,6 +1117,7 @@ function createDomHarness(options = {}) {
           : collectionContainerIds.includes(id)
             ? (html) => {
               removeButtonsByContainer.set(id, parseRemoveButtons(html));
+              collectionControlsByContainer.set(id, parseCollectionControls(html));
             }
           : null
       }));
@@ -1084,12 +1149,17 @@ function createDomHarness(options = {}) {
         return [
           ...allElements.filter((element) => ['BUTTON', 'INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName)),
           ...chapterButtons,
-          ...dynamicRemoveButtons()
+          ...dynamicRemoveButtons(),
+          ...dynamicCollectionControls()
         ];
       }
       if (selector === '[data-chapter]') return chapterButtons;
       const removeMatch = selector.match(/^\[data-remove="([^"]+)"\]$/);
       if (removeMatch) return dynamicRemoveButtons().filter((button) => button.dataset.remove === removeMatch[1]);
+      const collectionMatch = selector.match(/^\[data-type="([^"]+)"\] input, \[data-type="([^"]+)"\] textarea, \[data-type="([^"]+)"\] select$/);
+      if (collectionMatch && collectionMatch[1] === collectionMatch[2] && collectionMatch[1] === collectionMatch[3]) {
+        return dynamicCollectionControls(collectionMatch[1]);
+      }
       if (selector.includes('[data-type=') || selector.includes('[data-remove=')) return [];
       return [];
     },
@@ -1113,11 +1183,19 @@ function createDomHarness(options = {}) {
     },
     removeButtons(type) {
       return dynamicRemoveButtons().filter((button) => button.dataset.remove === type);
+    },
+    collectionInputs(type, field) {
+      return dynamicCollectionControls(type).filter((control) => control.dataset.field === field);
     }
   };
 
   function dynamicRemoveButtons() {
     return [...removeButtonsByContainer.values()].flat();
+  }
+
+  function dynamicCollectionControls(type = '') {
+    const controls = [...collectionControlsByContainer.values()].flat();
+    return type ? controls.filter((control) => control.closest('[data-id]')?.dataset.type === type) : controls;
   }
 }
 
@@ -1178,6 +1256,16 @@ class TestElement {
     this.parentNode = null;
   }
 
+  closest(selector) {
+    if (selector !== '[data-id]') return null;
+    let node = this;
+    while (node) {
+      if (node.dataset?.id) return node;
+      node = node.parentNode;
+    }
+    return null;
+  }
+
   get isConnected() {
     return this.tagName === 'BODY' || Boolean(this.parentNode?.isConnected);
   }
@@ -1214,6 +1302,94 @@ function parseRemoveButtons(html) {
   return buttons;
 }
 
+function parseCollectionControls(html) {
+  const controls = [];
+  const cardRegex = /<div class="row-card"([^>]*)>([\s\S]*?)(?=\n\s*<div class="row-card"|\s*$)/g;
+  let cardMatch;
+  while ((cardMatch = cardRegex.exec(html))) {
+    const id = getHtmlAttribute(cardMatch[1], 'data-id');
+    const type = getHtmlAttribute(cardMatch[1], 'data-type');
+    if (!id || !type) continue;
+    const card = new TestElement('DIV', {
+      dataset: {
+        id: decodeHtmlAttribute(id),
+        type: decodeHtmlAttribute(type)
+      }
+    });
+    for (const control of parseInputControls(cardMatch[2], card)) {
+      controls.push(control);
+    }
+  }
+  return controls;
+}
+
+function parseInputControls(html, card) {
+  return [
+    ...parseStandaloneControls(html, 'INPUT', /<input\b([^>]*)>/g, card),
+    ...parseTextareas(html, card),
+    ...parseSelects(html, card)
+  ];
+}
+
+function parseStandaloneControls(html, tagName, regex, card) {
+  const controls = [];
+  let match;
+  while ((match = regex.exec(html))) {
+    const field = getHtmlAttribute(match[1], 'data-field');
+    if (!field) continue;
+    controls.push(createCollectionControl(tagName, card, field, decodeHtmlAttribute(getHtmlAttribute(match[1], 'value'))));
+  }
+  return controls;
+}
+
+function parseTextareas(html, card) {
+  const controls = [];
+  const regex = /<textarea\b([^>]*)>([\s\S]*?)<\/textarea>/g;
+  let match;
+  while ((match = regex.exec(html))) {
+    const field = getHtmlAttribute(match[1], 'data-field');
+    if (!field) continue;
+    controls.push(createCollectionControl('TEXTAREA', card, field, decodeHtmlAttribute(match[2])));
+  }
+  return controls;
+}
+
+function parseSelects(html, card) {
+  const controls = [];
+  const regex = /<select\b([^>]*)>([\s\S]*?)<\/select>/g;
+  let match;
+  while ((match = regex.exec(html))) {
+    const field = getHtmlAttribute(match[1], 'data-field');
+    if (!field) continue;
+    controls.push(createCollectionControl('SELECT', card, field, selectedOptionValue(match[2])));
+  }
+  return controls;
+}
+
+function createCollectionControl(tagName, card, field, value) {
+  const control = new TestElement(tagName, {
+    dataset: {
+      field: decodeHtmlAttribute(field)
+    }
+  });
+  control.value = value;
+  card.appendChild(control);
+  return control;
+}
+
+function selectedOptionValue(html) {
+  const options = [];
+  const regex = /<option\b([^>]*)>/g;
+  let match;
+  while ((match = regex.exec(html))) {
+    options.push({
+      value: decodeHtmlAttribute(getHtmlAttribute(match[1], 'value')),
+      selected: /\sselected(?:\s|=|$)/.test(match[1])
+    });
+  }
+  return (options.find((option) => option.selected) || options[0] || { value: '' }).value;
+}
+
 function getHtmlAttribute(attributes, name) {
   const match = String(attributes).match(new RegExp(`${name}="([^"]*)"`));
   return match ? match[1] : '';
@@ -1221,6 +1397,7 @@ function getHtmlAttribute(attributes, name) {
 
 function decodeHtmlAttribute(value) {
   return String(value)
+    .replace(/&#10;/g, '\n')
     .replace(/&quot;/g, '"')
     .replace(/&#039;/g, "'")
     .replace(/&lt;/g, '<')
