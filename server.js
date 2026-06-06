@@ -431,7 +431,7 @@ function assertCompleteProjectPayload(project) {
       if (typeof item.id === 'string') {
         const id = item.id.trim();
         const idPath = `${field}[${index}].id`;
-        if (!id) {
+        if (!id || hasControlCharacters(id)) {
           malformedCollectionItemFields.push(idPath);
         } else if (seenIds.has(id)) {
           duplicateCollectionItemIds.push(idPath);
@@ -472,6 +472,10 @@ function isFiniteNumberValue(value) {
   const text = String(value).trim();
   if (!text) return false;
   return Number.isFinite(Number(text));
+}
+
+function hasControlCharacters(value) {
+  return /[\u0000-\u001f\u007f]/.test(value);
 }
 
 async function readProjectIfPresent() {

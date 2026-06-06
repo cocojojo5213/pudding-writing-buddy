@@ -1116,7 +1116,11 @@ function asString(value, fallback = '') {
 
 function asId(value, fallback) {
   const id = asString(value, '').trim();
-  return id || fallback;
+  return id && !hasControlCharacters(id) ? id : fallback;
+}
+
+function hasControlCharacters(value) {
+  return /[\u0000-\u001f\u007f]/.test(value);
 }
 
 function firstNonBlank(...values) {
