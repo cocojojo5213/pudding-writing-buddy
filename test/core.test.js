@@ -497,6 +497,44 @@ test('settlement refreshes its prior timeline event instead of appending stale s
   assert.doesNotMatch(settled.timeline.map((event) => event.event).join('\n'), /旧正文/);
 });
 
+test('settlement keeps same-title chapter timeline entries separate', () => {
+  const project = normalizeProject({
+    ...createDefaultProject(),
+    timeline: [],
+    chapters: [
+      {
+        id: 'same-title-first',
+        title: '同名章节',
+        body: '林澈把未来日期的医院缴费单放在桌上。',
+        plan: '',
+        audit: '',
+        summary: '',
+        status: 'draft',
+        settledAt: ''
+      },
+      {
+        id: 'same-title-second',
+        title: '同名章节',
+        body: '许闻在电梯里看见第十三层按钮亮起。',
+        plan: '',
+        audit: '',
+        summary: '',
+        status: 'draft',
+        settledAt: ''
+      }
+    ]
+  });
+
+  const first = applySettlement(project, project.chapters[0]).project;
+  const second = applySettlement(first, first.chapters[1]).project;
+
+  const automaticTimeline = second.timeline.filter((event) => event.source === 'settlement');
+  assert.equal(automaticTimeline.length, 2);
+  assert.deepEqual(automaticTimeline.map((event) => event.chapterId), ['same-title-first', 'same-title-second']);
+  assert.match(automaticTimeline[0].event, /缴费单/);
+  assert.match(automaticTimeline[1].event, /第十三层按钮/);
+});
+
 test('settlement preserves manually revised timeline entries', () => {
   const project = normalizeProject({
     ...createDefaultProject(),

@@ -977,16 +977,26 @@ function upsertSettlementTimelineEvent(project, settlement, existingChapter = {}
     };
     return;
   }
-  if (!project.timeline.some((event) => event.chapter === timelineEvent.chapter && event.event === timelineEvent.event)) {
+  if (!project.timeline.some((event) => isDuplicateTimelineEvent(event, timelineEvent))) {
     project.timeline.push(timelineEvent);
   }
 }
 
 function isSameSettlementTimelineEvent(event, { chapterId, priorTitle, currentTitle, priorSummary, currentSummary }) {
-  if (chapterId && event.source === 'settlement' && event.chapterId === chapterId && isGeneratedSettlementConsequence(event.consequence)) return true;
-  if (event.source === 'settlement' && (event.chapter === priorTitle || event.chapter === currentTitle) && isGeneratedSettlementConsequence(event.consequence)) return true;
+  if (event.source !== 'settlement') return false;
+  const eventChapterId = asString(event.chapterId, '').trim();
+  if (chapterId && eventChapterId && eventChapterId !== chapterId) return false;
+  if (chapterId && eventChapterId === chapterId && isGeneratedSettlementConsequence(event.consequence)) return true;
+  if ((event.chapter === priorTitle || event.chapter === currentTitle) && isGeneratedSettlementConsequence(event.consequence)) return true;
   if (priorSummary && event.chapter === priorTitle && event.event === priorSummary && isGeneratedSettlementConsequence(event.consequence)) return true;
-  return event.source === 'settlement' && event.chapter === currentTitle && event.event === currentSummary;
+  return event.chapter === currentTitle && event.event === currentSummary;
+}
+
+function isDuplicateTimelineEvent(event, timelineEvent) {
+  const eventChapterId = asString(event.chapterId, '').trim();
+  const timelineChapterId = asString(timelineEvent.chapterId, '').trim();
+  if (eventChapterId && timelineChapterId && eventChapterId !== timelineChapterId) return false;
+  return event.chapter === timelineEvent.chapter && event.event === timelineEvent.event;
 }
 
 function isGeneratedSettlementConsequence(value) {
