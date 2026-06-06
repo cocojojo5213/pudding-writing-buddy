@@ -581,6 +581,8 @@ export function settleChapterState(project, chapterInput = {}) {
     summary,
     timelineEvent: {
       id: createId(),
+      source: 'settlement',
+      chapterId: chapter.id,
       chapter: title,
       event: summary || `${title} 已完成但缺少摘要。`,
       consequence: touchedHooks.length ? `推进伏笔：${touchedHooks.map((hook) => hook.text).join('；')}` : '需要人工补充直接后果。'
@@ -648,9 +650,7 @@ export function applySettlement(project, chapterInput = {}) {
   } else {
     normalized.chapters.push(settledChapter);
   }
-  if (!normalized.timeline.some((event) => event.chapter === settlement.title && event.event === settlement.timelineEvent.event)) {
-    normalized.timeline.push(settlement.timelineEvent);
-  }
+  upsertSettlementTimelineEvent(normalized, settlement, existingChapter, settledChapter);
   for (const update of settlement.characterUpdates) {
     const character = normalized.characters.find((item) => item.id === update.id);
     if (character) {
@@ -863,6 +863,8 @@ function normalizeOutlineNode(item = {}, fallbackId = deterministicId('outline',
 function normalizeTimelineEvent(item = {}, fallbackId = deterministicId('timeline', item, 0)) {
   return {
     id: asId(item.id, fallbackId),
+    source: asString(item.source, ''),
+    chapterId: asString(item.chapterId, ''),
     chapter: asString(item.chapter, ''),
     event: asString(item.event, ''),
     consequence: asString(item.consequence, '')
@@ -923,6 +925,43 @@ function formatArcLine(arc) {
 
 function formatTimelineLine(event) {
   return `- ${formatInlineText(event.chapter, '未记录章节')}: ${formatInlineText(event.event, '未记录事件')}；后果=${formatInlineText(event.consequence, '未记录')}`;
+}
+
+function upsertSettlementTimelineEvent(project, settlement, existingChapter = {}, settledChapter = {}) {
+  const timelineEvent = {
+    ...settlement.timelineEvent,
+    source: 'settlement',
+    chapterId: settledChapter.id || settlement.timelineEvent.chapterId || existingChapter.id || ''
+  };
+  const existingIndex = project.timeline.findIndex((event) => isSameSettlementTimelineEvent(event, {
+    chapterId: timelineEvent.chapterId,
+    priorTitle: existingChapter.title || settlement.title,
+    currentTitle: settlement.title,
+    priorSummary: existingChapter.summary,
+    currentSummary: settlement.timelineEvent.event
+  }));
+  if (existingIndex >= 0) {
+    project.timeline[existingIndex] = {
+      ...timelineEvent,
+      id: project.timeline[existingIndex].id || timelineEvent.id
+    };
+    return;
+  }
+  if (!project.timeline.some((event) => event.chapter === timelineEvent.chapter && event.event === timelineEvent.event)) {
+    project.timeline.push(timelineEvent);
+  }
+}
+
+function isSameSettlementTimelineEvent(event, { chapterId, priorTitle, currentTitle, priorSummary, currentSummary }) {
+  if (chapterId && event.source === 'settlement' && event.chapterId === chapterId) return true;
+  if (event.source === 'settlement' && (event.chapter === priorTitle || event.chapter === currentTitle)) return true;
+  if (priorSummary && event.chapter === priorTitle && event.event === priorSummary && isGeneratedSettlementConsequence(event.consequence)) return true;
+  return event.source === 'settlement' && event.chapter === currentTitle && event.event === currentSummary;
+}
+
+function isGeneratedSettlementConsequence(value) {
+  const text = asString(value, '');
+  return text === '需要人工补充直接后果。' || text.startsWith('推进伏笔：');
 }
 
 function formatMarkdownHeading(value, fallback) {

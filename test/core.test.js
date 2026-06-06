@@ -271,6 +271,52 @@ test('settlement refreshes stale summaries from the current body', () => {
   assert.doesNotMatch(settled.chapters[0].summary, /旧摘要/);
 });
 
+test('settlement refreshes its prior timeline event instead of appending stale summaries', () => {
+  const project = normalizeProject({
+    ...createDefaultProject(),
+    timeline: [
+      {
+        id: 'manual-timeline',
+        chapter: '第1章 时间线刷新',
+        event: '人工记录：林澈先把缴费单藏起来。',
+        consequence: '这条人工时间线不应被自动沉淀覆盖。'
+      },
+      {
+        id: 'old-settlement-timeline',
+        source: 'settlement',
+        chapterId: 'refresh-timeline',
+        chapter: '第1章 时间线刷新',
+        event: '旧正文。',
+        consequence: '需要人工补充直接后果。'
+      }
+    ],
+    chapters: [{
+      id: 'refresh-timeline',
+      title: '第1章 时间线刷新',
+      body: '旧正文。',
+      plan: '',
+      audit: '',
+      summary: '旧正文。',
+      status: 'draft',
+      settledAt: '2026-01-01T00:00:00.000Z'
+    }]
+  });
+
+  const { project: settled } = applySettlement(project, {
+    id: 'refresh-timeline',
+    body: '林澈在电梯里看到第十三层按钮亮起。未来日期的医院缴费单从口袋里变热。'
+  });
+
+  assert.equal(settled.timeline.length, 2);
+  assert.equal(settled.timeline[0].id, 'manual-timeline');
+  assert.match(settled.timeline[0].event, /人工记录/);
+  assert.equal(settled.timeline[1].id, 'old-settlement-timeline');
+  assert.equal(settled.timeline[1].source, 'settlement');
+  assert.equal(settled.timeline[1].chapterId, 'refresh-timeline');
+  assert.match(settled.timeline[1].event, /第十三层按钮/);
+  assert.doesNotMatch(settled.timeline.map((event) => event.event).join('\n'), /旧正文/);
+});
+
 test('settlement appends truth ledger notes instead of overwriting old state', () => {
   const project = normalizeProject(createDefaultProject());
   project.characters[0].knowledge = '旧知识：林澈只知道电梯异常。';
