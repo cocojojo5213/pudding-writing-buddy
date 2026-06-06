@@ -729,10 +729,17 @@ function showActionError(error, label = 'Error') {
 async function flushSave() {
   const hadPendingTimer = Boolean(state.saveTimer);
   cancelPendingSave();
-  await waitForSave();
+  let saveError = null;
+  try {
+    await waitForSave();
+  } catch (error) {
+    saveError = error;
+  }
   if (hadPendingTimer || state.revision !== state.savedRevision) {
     await saveProject();
+    return;
   }
+  if (saveError) throw saveError;
 }
 
 async function waitForSave() {

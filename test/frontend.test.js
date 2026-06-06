@@ -176,6 +176,83 @@ test('settlement output keeps API-provided fields on one markdown line', async (
   assert.match(dom.byId('output').value, /^- 林澈 ## Fake Character: 知道缴费单 - fake knowledge$/m);
 });
 
+test('flushSave retries dirty revisions after an in-flight autosave failure', async () => {
+  const dom = createDomHarness();
+  const originalConsoleError = console.error;
+  let project = {
+    ...createDefaultProject(),
+    chapters: [{
+      id: 'autosave-retry-chapter',
+      title: '第1章',
+      body: '旧正文。',
+      plan: '',
+      audit: '',
+      summary: '',
+      status: 'draft',
+      createdAt: '',
+      settledAt: ''
+    }]
+  };
+  const savePayloads = [];
+  const events = [];
+  let releaseFirstSave;
+
+  try {
+    console.error = () => {};
+    globalThis.document = dom.document;
+    globalThis.window = dom.window;
+    globalThis.localStorage = createStorage();
+    globalThis.fetch = async (requestPath, options = {}) => {
+      if (requestPath === '/api/project' && options.method === 'POST') {
+        const payload = JSON.parse(options.body);
+        savePayloads.push(payload);
+        events.push(`save-${savePayloads.length}`);
+        if (savePayloads.length === 1) {
+          return await new Promise((resolve) => {
+            releaseFirstSave = () => resolve(jsonResponse({ error: 'Autosave failed once' }, 500));
+          });
+        }
+        project = {
+          ...payload.project,
+          versionToken: `saved-token-${savePayloads.length}`,
+          updatedAt: `2026-06-07T00:00:0${savePayloads.length}.000Z`
+        };
+        return jsonResponse(project);
+      }
+      if (requestPath === '/api/assist' && options.method === 'POST') {
+        const payload = JSON.parse(options.body);
+        events.push('assist');
+        assert.equal(payload.task, 'plan');
+        assert.equal(payload.project.chapters[0].body, '自动保存失败后仍要保住这一版正文。');
+        return jsonResponse({
+          output: '# 第1章计划：重试保存后继续\n\n章节目标：确认保存重试后再生成。'
+        });
+      }
+      if (requestPath === '/api/project') return jsonResponse(project);
+      throw new Error(`Unexpected fetch: ${requestPath}`);
+    };
+
+    const moduleUrl = pathToFileURL(path.join(APP_ROOT, 'public/app.js'));
+    await import(`${moduleUrl.href}?frontend-test=${Date.now()}`);
+    await waitFor(() => dom.byId('save-state').textContent === 'Ready');
+
+    dom.byId('chapterBody').value = '自动保存失败后仍要保住这一版正文。';
+    dom.byId('chapterBody').dispatchEvent({ type: 'input' });
+    await waitFor(() => savePayloads.length === 1 && releaseFirstSave, 2000);
+
+    dom.byId('plan').click();
+    releaseFirstSave();
+
+    await waitFor(() => events.includes('assist') && savePayloads.length >= 3, 2000);
+    assert.deepEqual(events, ['save-1', 'save-2', 'assist', 'save-3']);
+    assert.equal(savePayloads[1].project.chapters[0].body, '自动保存失败后仍要保住这一版正文。');
+    assert.match(savePayloads[2].project.chapters[0].plan, /重试保存后继续/);
+    assert.equal(dom.byId('save-state').textContent, 'Saved');
+  } finally {
+    console.error = originalConsoleError;
+  }
+});
+
 function jsonResponse(body, status = 200) {
   return {
     ok: status >= 200 && status < 300,
@@ -392,8 +469,8 @@ class TestClassList {
   }
 }
 
-async function waitFor(predicate) {
-  const deadline = Date.now() + 1000;
+async function waitFor(predicate, timeoutMs = 1000) {
+  const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (predicate()) return;
     await new Promise((resolve) => setTimeout(resolve, 10));
