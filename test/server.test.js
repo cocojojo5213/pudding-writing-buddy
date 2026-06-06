@@ -74,6 +74,30 @@ test('api preserves multibyte JSON split across network chunks', async () => {
   }
 });
 
+test('api rejects oversized request bodies without mutating the saved project', async () => {
+  const app = await startApp();
+  try {
+    const project = (await requestJson(app.baseUrl, '/api/project')).body;
+    const response = await rawRequest(app.baseUrl, '/api/project', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': 5_000_001
+      },
+      chunks: [Buffer.alloc(5_000_001, 'x')]
+    });
+
+    assert.equal(response.status, 413);
+    assert.match(JSON.parse(response.text).error, /Request body too large/);
+
+    const saved = JSON.parse(await readFile(path.join(app.dataDir, 'project.json'), 'utf8'));
+    assert.equal(saved.title, project.title);
+    assert.equal(saved.versionToken, project.versionToken);
+  } finally {
+    await app.stop();
+  }
+});
+
 test('api rejects blind writes when a project version exists', async () => {
   const app = await startApp();
   try {

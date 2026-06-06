@@ -535,9 +535,9 @@ async function readJson(request) {
   let totalBytes = 0;
   for await (const chunk of request) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    chunks.push(buffer);
     totalBytes += buffer.length;
     if (totalBytes > MAX_BODY_BYTES) throw new HttpError(413, 'Request body too large');
+    chunks.push(buffer);
   }
   if (!chunks.length) return {};
   const data = Buffer.concat(chunks, totalBytes).toString('utf8');
