@@ -765,13 +765,13 @@ function isPrivateModelTarget(hostname) {
 function isLoopbackModelAddress(address) {
   const normalized = normalizeHostname(address);
   const ipVersion = isIP(normalized);
-  if (ipVersion === 4) return normalized.split('.')[0] === '127';
+  if (ipVersion === 4) return isLoopbackIpv4Address(normalized);
   if (ipVersion !== 6) return false;
   const parts = expandIpv6(normalized);
   if (!parts) return false;
   const mappedIpv4 = ipv4FromMappedIpv6(parts);
   if (mappedIpv4) return isLoopbackModelAddress(mappedIpv4);
-  return parts.slice(0, 7).every((part) => part === 0) && parts[7] === 1;
+  return isLoopbackIpv6Address(parts);
 }
 
 function normalizeHostname(hostname) {
@@ -800,14 +800,24 @@ function isPrivateIpv4Target(address) {
 function isPrivateIpv6Target(address) {
   const parts = expandIpv6(address);
   if (!parts) return true;
+  if (parts.every((part) => part === 0)) return true;
+  if (isLoopbackIpv6Address(parts)) return false;
   const mappedIpv4 = ipv4FromMappedIpv6(parts);
   if (mappedIpv4) return isPrivateIpv4Target(mappedIpv4);
-  if (parts.every((part) => part === 0)) return true;
-  if (parts.slice(0, 7).every((part) => part === 0) && parts[7] === 1) return false;
+  const transitionIpv4 = ipv4FromTransitionIpv6(parts);
+  if (transitionIpv4) return isPrivateIpv4Target(transitionIpv4) || isLoopbackIpv4Address(transitionIpv4);
   const first = parts[0];
   return (first & 0xff00) === 0xff00
     || (first & 0xfe00) === 0xfc00
     || (first & 0xffc0) === 0xfe80;
+}
+
+function isLoopbackIpv4Address(address) {
+  return address.split('.')[0] === '127';
+}
+
+function isLoopbackIpv6Address(parts) {
+  return parts.slice(0, 7).every((part) => part === 0) && parts[7] === 1;
 }
 
 function expandIpv6(address) {
@@ -825,11 +835,26 @@ function expandIpv6(address) {
 function ipv4FromMappedIpv6(parts) {
   const mapped = parts.slice(0, 5).every((part) => part === 0) && parts[5] === 0xffff;
   if (!mapped) return '';
+  return ipv4FromIpv6Words(parts[6], parts[7]);
+}
+
+function ipv4FromTransitionIpv6(parts) {
+  const compatible = parts.slice(0, 6).every((part) => part === 0);
+  if (compatible) return ipv4FromIpv6Words(parts[6], parts[7]);
+  const nat64WellKnown = parts[0] === 0x0064
+    && parts[1] === 0xff9b
+    && parts.slice(2, 6).every((part) => part === 0);
+  if (nat64WellKnown) return ipv4FromIpv6Words(parts[6], parts[7]);
+  if (parts[0] === 0x2002) return ipv4FromIpv6Words(parts[1], parts[2]);
+  return '';
+}
+
+function ipv4FromIpv6Words(high, low) {
   return [
-    parts[6] >> 8,
-    parts[6] & 0xff,
-    parts[7] >> 8,
-    parts[7] & 0xff
+    high >> 8,
+    high & 0xff,
+    low >> 8,
+    low & 0xff
   ].join('.');
 }
 
