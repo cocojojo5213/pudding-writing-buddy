@@ -803,6 +803,43 @@ test('api rejects unsafe model base URLs before proxying', async () => {
   }
 });
 
+test('api does not follow model proxy redirects', async () => {
+  let redirectedRequests = 0;
+  const redirectedTarget = await startMockModel((_request, response) => {
+    redirectedRequests += 1;
+    response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    response.end(JSON.stringify({
+      choices: [{ message: { content: 'redirected model response' } }]
+    }));
+  });
+  const redirectingModel = await startMockModel((_request, response) => {
+    response.writeHead(302, { Location: `${redirectedTarget.baseUrl}/v1/chat/completions` });
+    response.end();
+  });
+  const app = await startApp();
+  try {
+    const response = await requestJson(app.baseUrl, '/api/assist', {
+      method: 'POST',
+      body: JSON.stringify({
+        task: 'plan',
+        modelConfig: {
+          baseUrl: redirectingModel.baseUrl,
+          apiKey: 'test-key',
+          model: 'test-model'
+        }
+      })
+    });
+
+    assert.equal(response.status, 500);
+    assert.match(response.body.error, /Model request failed/);
+    assert.equal(redirectedRequests, 0);
+  } finally {
+    await app.stop();
+    await redirectingModel.stop();
+    await redirectedTarget.stop();
+  }
+});
+
 test('api extracts text from common OpenAI-compatible model response shapes', async () => {
   const model = await startMockModel(async (request, response) => {
     const body = await readRequestJson(request);

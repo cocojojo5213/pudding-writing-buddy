@@ -562,6 +562,7 @@ async function callModel(task, project, payload, config) {
     const result = await fetch(modelConfig.endpoint, {
       method: 'POST',
       signal: controller.signal,
+      redirect: 'manual',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${modelConfig.apiKey}`
