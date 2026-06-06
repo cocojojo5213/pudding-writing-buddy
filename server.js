@@ -61,7 +61,7 @@ const server = createServer(async (request, response) => {
 });
 
 server.listen(PORT, '127.0.0.1', () => {
-  console.log(`AI Novel Copilot running at http://127.0.0.1:${PORT}`);
+  console.log(`Pudding Writing Buddy running at http://127.0.0.1:${PORT}`);
 });
 
 async function handleApi(request, response) {
@@ -81,7 +81,7 @@ async function handleApi(request, response) {
     const project = await loadProject();
     sendJson(response, 200, {
       ok: true,
-      app: 'ai-novel-copilot',
+      app: 'pudding-writing-buddy',
       port: PORT,
       schemaVersion: project.schemaVersion,
       metrics: deriveProjectMetrics(project)

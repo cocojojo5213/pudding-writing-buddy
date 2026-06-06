@@ -5,7 +5,7 @@
 ## Run
 
 ```bash
-cd /home/ubuntu/ai-novel-copilot
+cd pudding-writing-buddy
 npm start
 ```
 
