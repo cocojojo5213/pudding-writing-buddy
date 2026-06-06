@@ -143,6 +143,28 @@ test('export keeps ledger fields on one markdown line', () => {
   assert.match(markdown, /旧案重启 ## Beat: 发现线索 - 假列表/);
 });
 
+test('export keeps chapter summary on one markdown line', () => {
+  const project = normalizeProject({
+    ...createDefaultProject(),
+    chapters: [{
+      id: 'summary-injection',
+      title: 'Opening',
+      body: '正文保留原样。\n## 正文里的标题允许保留',
+      plan: '',
+      audit: '',
+      summary: '摘要第一句。\n## Injected Summary\n- fake item',
+      status: 'draft'
+    }]
+  });
+
+  const markdown = exportMarkdown(project);
+
+  assert.doesNotMatch(markdown, /^## Injected Summary/m);
+  assert.doesNotMatch(markdown, /^- fake item/m);
+  assert.match(markdown, /^> 摘要：摘要第一句。 ## Injected Summary - fake item$/m);
+  assert.match(markdown, /^## 正文里的标题允许保留$/m);
+});
+
 test('context packet includes state ledgers for long-form continuity', () => {
   const project = normalizeProject(createDefaultProject());
   const context = buildContextPacket(project, 1);
@@ -166,6 +188,22 @@ test('context packet does not wrap the first chapter back to the last chapter', 
   assert.match(firstChapterContext, /## Prior Chapter\n暂无上一章/);
   assert.doesNotMatch(firstChapterContext, /第二章摘要/);
   assert.match(thirdChapterContext, /第二章摘要/);
+});
+
+test('numeric-looking chapter ids resolve as ids before chapter numbers', () => {
+  const project = normalizeProject({
+    ...createDefaultProject(),
+    chapters: [
+      { id: '2', title: 'Numeric Id First', body: '第一章正文。', summary: '第一章摘要。' },
+      { id: 'actual-second', title: 'Actual Second', body: '第二章正文。', summary: '第二章摘要。' }
+    ]
+  });
+
+  const context = buildContextPacket(project, '2');
+
+  assert.match(context, /Next chapter: 1/);
+  assert.match(context, /## Prior Chapter\n暂无上一章/);
+  assert.doesNotMatch(context, /第二章摘要/);
 });
 
 test('draft quality detects AI phrasing and continuity risk', () => {

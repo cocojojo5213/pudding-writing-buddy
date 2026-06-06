@@ -781,7 +781,7 @@ export function exportMarkdown(project) {
   ];
   for (const [index, chapter] of normalized.chapters.entries()) {
     parts.push(`### ${formatMarkdownHeading(chapter.title, `第${index + 1}章`)}`, '');
-    if (chapter.summary) parts.push(`> 摘要：${chapter.summary}`, '');
+    if (chapter.summary) parts.push(`> 摘要：${formatInlineText(chapter.summary, '')}`, '');
     parts.push(chapter.body || '', '');
   }
   parts.push('## 章节工作记录', '');
@@ -978,11 +978,11 @@ function makeFinding(severity, title, suggestion) {
 }
 
 function resolveChapterNumber(project, chapterRef) {
-  if (Number.isFinite(Number(chapterRef))) return Math.max(1, Number(chapterRef));
   if (chapterRef) {
-    const index = project.chapters.findIndex((chapter) => chapter.id === chapterRef);
+    const index = project.chapters.findIndex((chapter) => chapter.id === String(chapterRef));
     if (index >= 0) return index + 1;
   }
+  if (Number.isFinite(Number(chapterRef))) return Math.max(1, Number(chapterRef));
   return project.chapters.length + 1;
 }
 
