@@ -115,7 +115,7 @@ test('api rejects blind writes when a project version exists', async () => {
   }
 });
 
-test('api rejects project save metadata without a project payload', async () => {
+test('api rejects project saves without a complete project payload', async () => {
   const app = await startApp();
   try {
     const project = (await requestJson(app.baseUrl, '/api/project')).body;
@@ -147,6 +147,26 @@ test('api rejects project save metadata without a project payload', async () => 
     });
     assert.equal(wrongShape.status, 400);
     assert.match(wrongShape.body.error, /Project payload must be an object/);
+
+    const sparseWrappedProject = await requestJson(app.baseUrl, '/api/project', {
+      method: 'POST',
+      body: JSON.stringify({
+        project: { versionToken: savedProject.body.versionToken },
+        expectedVersionToken: savedProject.body.versionToken
+      })
+    });
+    assert.equal(sparseWrappedProject.status, 400);
+    assert.match(sparseWrappedProject.body.error, /complete project data/);
+
+    const sparseDirectProject = await requestJson(app.baseUrl, '/api/project', {
+      method: 'POST',
+      body: JSON.stringify({
+        versionToken: savedProject.body.versionToken,
+        title: 'Sparse Direct Title'
+      })
+    });
+    assert.equal(sparseDirectProject.status, 400);
+    assert.match(sparseDirectProject.body.error, /complete project data/);
 
     const saved = JSON.parse(await readFile(path.join(app.dataDir, 'project.json'), 'utf8'));
     assert.equal(saved.title, 'Payload Boundary Title');

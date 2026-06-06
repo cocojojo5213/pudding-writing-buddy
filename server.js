@@ -31,6 +31,7 @@ const DEFAULT_MODEL_MAX_TOKENS = 3500;
 const MIN_MODEL_MAX_TOKENS = 500;
 const MAX_MODEL_MAX_TOKENS = 20_000;
 const STALE_TEMP_MS = Number(process.env.STALE_TEMP_MS || 24 * 60 * 60 * 1000);
+const PROJECT_COLLECTION_FIELDS = ['characters', 'hooks', 'outline', 'timeline', 'resources', 'arcs', 'chapters'];
 let projectWriteQueue = Promise.resolve();
 
 const MIME_TYPES = {
@@ -297,16 +298,26 @@ function chapterInputForSettlement(project, chapterInput) {
 }
 
 function readProjectSavePayload(body) {
+  let project;
   if (Object.hasOwn(body, 'project')) {
     if (!isPlainObject(body.project)) {
       throw new HttpError(400, 'Project payload must be an object.');
     }
-    return body.project;
-  }
-  if (Object.hasOwn(body, 'expectedVersionToken') || Object.hasOwn(body, 'expectedUpdatedAt')) {
+    project = body.project;
+  } else if (Object.hasOwn(body, 'expectedVersionToken') || Object.hasOwn(body, 'expectedUpdatedAt')) {
     throw new HttpError(400, 'Project payload is required when sending version metadata.');
+  } else {
+    project = body;
   }
-  return body;
+  assertCompleteProjectPayload(project);
+  return project;
+}
+
+function assertCompleteProjectPayload(project) {
+  const missing = PROJECT_COLLECTION_FIELDS.filter((field) => !Array.isArray(project[field]));
+  if (missing.length) {
+    throw new HttpError(400, `Project payload must include complete project data. Missing collections: ${missing.join(', ')}.`);
+  }
 }
 
 async function readProjectIfPresent() {
