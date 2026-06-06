@@ -724,8 +724,8 @@ export function exportMarkdown(project) {
   const parts = [
     `# ${formatMarkdownHeading(normalized.title, 'Untitled Novel')}`,
     '',
-    `类型：${normalized.genre}`,
-    `一句话：${normalized.logline}`,
+    `类型：${formatInlineText(normalized.genre, '未设定')}`,
+    `一句话：${formatInlineText(normalized.logline, '未设定')}`,
     `目标长度：${normalized.targetWords}`,
     '',
     '## 创作意图',

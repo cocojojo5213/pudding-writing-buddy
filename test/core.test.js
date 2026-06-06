@@ -164,6 +164,21 @@ test('export keeps ledger fields on one markdown line', () => {
   assert.match(markdown, /旧案重启 ## Beat: 发现线索 - 假列表/);
 });
 
+test('export keeps scalar metadata on one markdown line', () => {
+  const project = normalizeProject({
+    title: 'Clean Metadata',
+    genre: '都市奇幻\n## Fake Genre Section',
+    logline: '一句话简介\n- fake bullet'
+  });
+
+  const markdown = exportMarkdown(project);
+
+  assert.doesNotMatch(markdown, /^## Fake Genre Section/m);
+  assert.doesNotMatch(markdown, /^- fake bullet/m);
+  assert.match(markdown, /^类型：都市奇幻 ## Fake Genre Section$/m);
+  assert.match(markdown, /^一句话：一句话简介 - fake bullet$/m);
+});
+
 test('export keeps chapter summary on one markdown line', () => {
   const project = normalizeProject({
     ...createDefaultProject(),
