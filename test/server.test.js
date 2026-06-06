@@ -769,7 +769,20 @@ test('api normalizes model config before proxying requests', async () => {
 test('api rejects unsafe model base URLs before proxying', async () => {
   const app = await startApp();
   try {
-    for (const baseUrl of ['ftp://example.test/v1', 'https://example.test/v1?key=value']) {
+    for (const baseUrl of [
+      'ftp://example.test/v1',
+      'https://example.test/v1?key=value',
+      'http://0.0.0.0/v1',
+      'http://10.0.0.1/v1',
+      'http://100.64.0.1/v1',
+      'http://169.254.169.254/latest',
+      'http://172.16.0.1/v1',
+      'http://192.168.1.1/v1',
+      'http://198.18.0.1/v1',
+      'http://224.0.0.1/v1',
+      'http://[fd00::1]/v1',
+      'http://[fe80::1]/v1'
+    ]) {
       const response = await requestJson(app.baseUrl, '/api/assist', {
         method: 'POST',
         body: JSON.stringify({

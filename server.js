@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { isIP } from 'node:net';
 import { copyFile, mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -26,6 +27,7 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const REQUEST_BASE_URL = 'http://127.0.0.1';
 const MAX_BODY_BYTES = 5_000_000;
 const MODEL_TIMEOUT_MS = 120_000;
+const ALLOW_PRIVATE_MODEL_BASE_URLS = process.env.ALLOW_PRIVATE_MODEL_BASE_URLS === '1';
 const DEFAULT_MODEL_TEMPERATURE = 0.75;
 const MIN_MODEL_TEMPERATURE = 0;
 const MAX_MODEL_TEMPERATURE = 2;
@@ -628,9 +630,80 @@ function buildModelEndpoint(baseUrlValue) {
   if (url.search || url.hash) {
     throw new HttpError(400, 'Model base URL must not include query strings or fragments.');
   }
+  if (!ALLOW_PRIVATE_MODEL_BASE_URLS && isPrivateModelTarget(url.hostname)) {
+    throw new HttpError(400, 'Model base URL must not target private, link-local, multicast, or metadata addresses. Use localhost/127.0.0.1 for local gateways, or set ALLOW_PRIVATE_MODEL_BASE_URLS=1 to opt in.');
+  }
   const pathname = url.pathname.replace(/\/+$/, '');
   url.pathname = pathname.endsWith('/chat/completions') ? pathname : `${pathname}/chat/completions`;
   return url.toString();
+}
+
+function isPrivateModelTarget(hostname) {
+  const normalized = normalizeHostname(hostname);
+  if (!normalized || normalized === 'localhost') return false;
+  const ipVersion = isIP(normalized);
+  if (ipVersion === 4) return isPrivateIpv4Target(normalized);
+  if (ipVersion === 6) return isPrivateIpv6Target(normalized);
+  return false;
+}
+
+function normalizeHostname(hostname) {
+  return String(hostname || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^\[(.*)\]$/, '$1')
+    .replace(/\.$/, '');
+}
+
+function isPrivateIpv4Target(address) {
+  const octets = address.split('.').map((part) => Number(part));
+  if (octets.length !== 4 || octets.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return true;
+  const [a, b] = octets;
+  if (a === 127) return false;
+  return a === 0
+    || a === 10
+    || (a === 100 && b >= 64 && b <= 127)
+    || (a === 169 && b === 254)
+    || (a === 172 && b >= 16 && b <= 31)
+    || (a === 192 && b === 168)
+    || (a === 198 && (b === 18 || b === 19))
+    || a >= 224;
+}
+
+function isPrivateIpv6Target(address) {
+  const parts = expandIpv6(address);
+  if (!parts) return true;
+  const mappedIpv4 = ipv4FromMappedIpv6(parts);
+  if (mappedIpv4) return isPrivateIpv4Target(mappedIpv4);
+  if (parts.every((part) => part === 0)) return true;
+  if (parts.slice(0, 7).every((part) => part === 0) && parts[7] === 1) return false;
+  const first = parts[0];
+  return (first & 0xff00) === 0xff00
+    || (first & 0xfe00) === 0xfc00
+    || (first & 0xffc0) === 0xfe80;
+}
+
+function expandIpv6(address) {
+  const sections = address.split('::');
+  if (sections.length > 2) return null;
+  const head = sections[0] ? sections[0].split(':') : [];
+  const tail = sections.length === 2 && sections[1] ? sections[1].split(':') : [];
+  const missing = sections.length === 2 ? 8 - head.length - tail.length : 0;
+  const parts = sections.length === 2 ? [...head, ...Array(missing).fill('0'), ...tail] : head;
+  if (missing < 0 || parts.length !== 8) return null;
+  const numbers = parts.map((part) => /^[0-9a-f]{1,4}$/i.test(part) ? parseInt(part, 16) : Number.NaN);
+  return numbers.some((part) => !Number.isInteger(part) || part < 0 || part > 0xffff) ? null : numbers;
+}
+
+function ipv4FromMappedIpv6(parts) {
+  const mapped = parts.slice(0, 5).every((part) => part === 0) && parts[5] === 0xffff;
+  if (!mapped) return '';
+  return [
+    parts[6] >> 8,
+    parts[6] & 0xff,
+    parts[7] >> 8,
+    parts[7] & 0xff
+  ].join('.');
 }
 
 function toTrimmedString(value) {
