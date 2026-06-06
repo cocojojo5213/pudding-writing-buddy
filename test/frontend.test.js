@@ -390,6 +390,68 @@ test('settlement output keeps API-provided fields on one markdown line', async (
   assert.match(dom.byId('output').value, /^- 林澈 ## Fake Character: 知道缴费单 - fake knowledge$/m);
 });
 
+test('settlement keeps the editor on the returned chapter when ids change', async () => {
+  const dom = createDomHarness();
+  const project = {
+    ...createDefaultProject(),
+    chapters: [{
+      id: 'client-settle-id',
+      title: '第1章 临时编号',
+      body: '林澈把未来日期的医院缴费单放在桌上。',
+      plan: '',
+      audit: '',
+      summary: '',
+      status: 'draft',
+      createdAt: '',
+      settledAt: ''
+    }]
+  };
+
+  globalThis.document = dom.document;
+  globalThis.window = dom.window;
+  globalThis.localStorage = createStorage();
+  globalThis.fetch = async (requestPath, options = {}) => {
+    if (requestPath === '/api/project') return jsonResponse(project);
+    if (requestPath === '/api/settle' && options.method === 'POST') {
+      return jsonResponse({
+        project: {
+          ...project,
+          chapters: [{
+            ...project.chapters[0],
+            id: 'server-returned-id',
+            title: '第1章 服务端编号',
+            summary: '服务端沉淀摘要',
+            settledAt: '2026-06-07T00:00:00.000Z'
+          }]
+        },
+        settlement: {
+          title: '第1章 服务端编号',
+          summary: '服务端沉淀摘要',
+          timelineEvent: {
+            event: '林澈确认缴费单异常。',
+            consequence: '需要继续核对来源。'
+          },
+          characterUpdates: [],
+          hookUpdates: [],
+          resourceUpdates: []
+        }
+      });
+    }
+    throw new Error(`Unexpected fetch: ${requestPath}`);
+  };
+
+  const moduleUrl = pathToFileURL(path.join(APP_ROOT, 'public/app.js'));
+  await import(`${moduleUrl.href}?frontend-test=${Date.now()}`);
+  await waitFor(() => dom.byId('save-state').textContent === 'Ready');
+
+  dom.byId('settle').click();
+
+  await waitFor(() => dom.byId('save-state').textContent === 'Settled');
+  assert.equal(dom.byId('chapterTitle').value, '第1章 服务端编号');
+  assert.equal(dom.byId('chapterBody').value, project.chapters[0].body);
+  assert.equal(dom.byId('chapterSummary').value, '服务端沉淀摘要');
+});
+
 test('flushSave retries dirty revisions after an in-flight autosave failure', async () => {
   const dom = createDomHarness();
   const originalConsoleError = console.error;

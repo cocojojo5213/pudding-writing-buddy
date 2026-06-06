@@ -471,7 +471,7 @@ async function runSettle() {
       })
     });
     state.project = result.project;
-    state.selectedChapterId = chapter.id;
+    state.selectedChapterId = findReturnedChapterId(result.project, chapter);
     state.savedRevision = state.revision;
     $('#output').value = formatSettlement(result.settlement);
     await refreshMetrics(false);
@@ -653,6 +653,15 @@ async function refreshMetrics(showStatus) {
 
 function selectedChapter() {
   return state.project.chapters.find((chapter) => chapter.id === state.selectedChapterId) || null;
+}
+
+function findReturnedChapterId(project, previousChapter) {
+  const chapters = Array.isArray(project?.chapters) ? project.chapters : [];
+  return chapters.find((chapter) => chapter.id === previousChapter.id)?.id
+    || chapters.find((chapter) => chapter.body === previousChapter.body && chapter.title === previousChapter.title)?.id
+    || chapters.find((chapter) => chapter.body === previousChapter.body)?.id
+    || chapters[0]?.id
+    || null;
 }
 
 function ensureChapter() {
