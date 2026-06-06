@@ -99,6 +99,33 @@ test('normalization repairs duplicate and unsafe legacy collection ids stably', 
   assert.deepEqual(first.chapters.map((item) => item.id), second.chapters.map((item) => item.id));
 });
 
+test('normalization repairs non-string legacy collection ids stably', () => {
+  const legacy = {
+    characters: [
+      { id: { value: 'object-id' }, name: '对象编号' },
+      { id: ['array-id'], name: '数组编号' },
+      { id: true, name: '布尔编号' },
+      { id: 42, name: '数字编号' }
+    ],
+    chapters: [
+      { id: { value: 'chapter-object-id' }, title: '对象章节', body: '对象章节正文。' },
+      { id: ['chapter-array-id'], title: '数组章节', body: '数组章节正文。' }
+    ]
+  };
+
+  const first = normalizeProject(legacy);
+  const second = normalizeProject(legacy);
+
+  assert.match(first.characters[0].id, /^character-[a-f0-9]{12}$/);
+  assert.match(first.characters[1].id, /^character-[a-f0-9]{12}$/);
+  assert.match(first.characters[2].id, /^character-[a-f0-9]{12}$/);
+  assert.equal(first.characters[3].id, '42');
+  assert.match(first.chapters[0].id, /^chapter-[a-f0-9]{12}$/);
+  assert.match(first.chapters[1].id, /^chapter-[a-f0-9]{12}$/);
+  assert.deepEqual(first.characters.map((item) => item.id), second.characters.map((item) => item.id));
+  assert.deepEqual(first.chapters.map((item) => item.id), second.chapters.map((item) => item.id));
+});
+
 test('normalization migrates legacy chapter text without reviving cleared bodies', () => {
   const legacyTextOnly = normalizeProject({
     chapters: [{

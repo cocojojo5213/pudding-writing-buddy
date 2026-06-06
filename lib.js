@@ -1152,7 +1152,8 @@ function asString(value, fallback = '') {
 }
 
 function asId(value, fallback) {
-  const id = asString(value, '').trim();
+  if (typeof value !== 'string' && (typeof value !== 'number' || !Number.isFinite(value))) return fallback;
+  const id = String(value).trim();
   return id && !hasControlCharacters(id) ? id : fallback;
 }
 
