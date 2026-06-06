@@ -105,6 +105,103 @@ test('markdown export clicks a mounted link and revokes the object URL after cle
   await waitFor(() => revokedUrls.includes('blob:pudding-export'));
 });
 
+test('markdown export cancels pending autosave so rescue output is not overwritten', async () => {
+  const dom = createDomHarness();
+  const originalConsoleError = console.error;
+  const project = createDefaultProject();
+  let saveAttempts = 0;
+
+  try {
+    console.error = () => {};
+    globalThis.document = dom.document;
+    globalThis.window = dom.window;
+    globalThis.localStorage = createStorage();
+    globalThis.URL = {
+      createObjectURL() {
+        return 'blob:pudding-rescue-export';
+      },
+      revokeObjectURL() {}
+    };
+    globalThis.fetch = async (requestPath, options = {}) => {
+      if (requestPath === '/api/project' && options.method === 'POST') {
+        saveAttempts += 1;
+        return jsonResponse({ error: 'Delayed autosave should not run after export' }, 500);
+      }
+      if (requestPath === '/api/project') return jsonResponse(project);
+      if (requestPath === '/api/export' && options.method === 'POST') {
+        const payload = JSON.parse(options.body);
+        assert.equal(payload.project.title, 'Rescue Export Title');
+        return jsonResponse({
+          filename: 'Rescue.md',
+          markdown: '# Rescue Export\n\n未保存修改也应出现在导出里。'
+        });
+      }
+      throw new Error(`Unexpected fetch: ${requestPath}`);
+    };
+
+    const moduleUrl = pathToFileURL(path.join(APP_ROOT, 'public/app.js'));
+    await import(`${moduleUrl.href}?frontend-test=${Date.now()}`);
+    await waitFor(() => dom.byId('save-state').textContent === 'Ready');
+
+    dom.byId('title').value = 'Rescue Export Title';
+    dom.byId('title').dispatchEvent({ type: 'input' });
+    dom.byId('export-md').click();
+
+    await waitFor(() => dom.byId('output').value.includes('Rescue Export'));
+    await new Promise((resolve) => setTimeout(resolve, 850));
+
+    assert.equal(saveAttempts, 0);
+    assert.equal(dom.byId('output').value, '# Rescue Export\n\n未保存修改也应出现在导出里。');
+    assert.equal(dom.byId('save-state').textContent, 'Changed');
+  } finally {
+    console.error = originalConsoleError;
+  }
+});
+
+test('snapshot cancels pending autosave so rescue status is not overwritten', async () => {
+  const dom = createDomHarness();
+  const originalConsoleError = console.error;
+  const project = createDefaultProject();
+  let saveAttempts = 0;
+
+  try {
+    console.error = () => {};
+    globalThis.document = dom.document;
+    globalThis.window = dom.window;
+    globalThis.localStorage = createStorage();
+    globalThis.fetch = async (requestPath, options = {}) => {
+      if (requestPath === '/api/project' && options.method === 'POST') {
+        saveAttempts += 1;
+        return jsonResponse({ error: 'Delayed autosave should not run after snapshot' }, 500);
+      }
+      if (requestPath === '/api/project') return jsonResponse(project);
+      if (requestPath === '/api/snapshot' && options.method === 'POST') {
+        const payload = JSON.parse(options.body);
+        assert.equal(payload.project.title, 'Rescue Snapshot Title');
+        return jsonResponse({ filename: 'project-rescue.json' });
+      }
+      throw new Error(`Unexpected fetch: ${requestPath}`);
+    };
+
+    const moduleUrl = pathToFileURL(path.join(APP_ROOT, 'public/app.js'));
+    await import(`${moduleUrl.href}?frontend-test=${Date.now()}`);
+    await waitFor(() => dom.byId('save-state').textContent === 'Ready');
+
+    dom.byId('title').value = 'Rescue Snapshot Title';
+    dom.byId('title').dispatchEvent({ type: 'input' });
+    dom.byId('snapshot').click();
+
+    await waitFor(() => dom.byId('output').value.includes('project-rescue.json'));
+    await new Promise((resolve) => setTimeout(resolve, 850));
+
+    assert.equal(saveAttempts, 0);
+    assert.equal(dom.byId('output').value, 'Snapshot saved: data/snapshots/project-rescue.json');
+    assert.equal(dom.byId('save-state').textContent, 'Snapshot; Changed');
+  } finally {
+    console.error = originalConsoleError;
+  }
+});
+
 test('settlement output keeps API-provided fields on one markdown line', async () => {
   const dom = createDomHarness();
   const project = {

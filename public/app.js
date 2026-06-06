@@ -473,6 +473,7 @@ async function runBrainstorm() {
 
 async function snapshotProject() {
   collectProjectInputs();
+  cancelPendingSave();
   const result = await api('/api/snapshot', {
     method: 'POST',
     body: JSON.stringify({ project: state.project })
@@ -483,6 +484,7 @@ async function snapshotProject() {
 
 async function exportMarkdown() {
   collectProjectInputs();
+  cancelPendingSave();
   const result = await api('/api/export', {
     method: 'POST',
     body: JSON.stringify({ project: state.project })
