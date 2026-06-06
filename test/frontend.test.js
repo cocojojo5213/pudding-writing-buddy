@@ -43,6 +43,48 @@ test('typing into an empty chapter editor preserves the first edit on save', asy
   assert.equal(savedPayloads[0].project.chapters[0].body, '第一句不能被创建章节时的重绘抹掉。');
 });
 
+test('typing into an empty non-title editor keeps the generated chapter title', async () => {
+  const dom = createDomHarness();
+  const savedPayloads = [];
+  let project = createDefaultProject();
+
+  globalThis.document = dom.document;
+  globalThis.window = dom.window;
+  globalThis.localStorage = createStorage();
+  globalThis.fetch = async (requestPath, options = {}) => {
+    if (requestPath === '/api/project' && options.method === 'POST') {
+      const payload = JSON.parse(options.body);
+      savedPayloads.push(payload);
+      project = {
+        ...payload.project,
+        versionToken: 'saved-generated-title-token',
+        updatedAt: '2026-06-07T00:00:00.000Z'
+      };
+      return jsonResponse(project);
+    }
+    if (requestPath === '/api/project') return jsonResponse(project);
+    throw new Error(`Unexpected fetch: ${requestPath}`);
+  };
+
+  const moduleUrl = pathToFileURL(path.join(APP_ROOT, 'public/app.js'));
+  await import(`${moduleUrl.href}?frontend-test=${Date.now()}`);
+  await waitFor(() => dom.byId('save-state').textContent === 'Ready');
+
+  dom.byId('chapterBody').value = '先写正文触发隐式建章。';
+  dom.byId('chapterBody').dispatchEvent({ type: 'input' });
+  assert.equal(dom.byId('chapterTitle').value, '第1章');
+
+  dom.byId('chapterPlan').value = '再补计划时不能擦掉默认标题。';
+  dom.byId('chapterPlan').dispatchEvent({ type: 'input' });
+  dom.byId('save-project').click();
+
+  await waitFor(() => savedPayloads.length > 0);
+
+  assert.equal(savedPayloads[0].project.chapters[0].title, '第1章');
+  assert.equal(savedPayloads[0].project.chapters[0].body, '先写正文触发隐式建章。');
+  assert.equal(savedPayloads[0].project.chapters[0].plan, '再补计划时不能擦掉默认标题。');
+});
+
 test('invalid target words are shown locally and not autosaved', async () => {
   const dom = createDomHarness();
   const originalConsoleError = console.error;

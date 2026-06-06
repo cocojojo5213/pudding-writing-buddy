@@ -368,6 +368,7 @@ function updateSelectedChapterFromEditor() {
   const createdFromEditor = !chapter;
   if (!chapter) {
     chapter = createChapter();
+    if (!$('#chapterTitle').value) $('#chapterTitle').value = chapter.title;
   }
   chapter.title = $('#chapterTitle').value || (createdFromEditor ? chapter.title : '');
   chapter.plan = $('#chapterPlan').value;
