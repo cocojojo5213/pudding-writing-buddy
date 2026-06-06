@@ -655,19 +655,19 @@ export function applySettlement(project, chapterInput = {}) {
     const character = normalized.characters.find((item) => item.id === update.id);
     if (character) {
       character.lastSeen = update.lastSeen;
-      character.knowledge = update.knowledge;
+      character.knowledge = mergeLedgerText(character.knowledge, update.knowledge);
     }
   }
   for (const update of settlement.hookUpdates) {
     const hook = normalized.hooks.find((item) => item.id === update.id);
     if (hook) {
       hook.status = update.to;
-      hook.note = update.note;
+      hook.note = mergeLedgerText(hook.note, update.note);
     }
   }
   for (const update of settlement.resourceUpdates) {
     const resource = normalized.resources.find((item) => item.id === update.id);
-    if (resource) resource.note = update.note;
+    if (resource) resource.note = mergeLedgerText(resource.note, update.note);
   }
   normalized.updatedAt = new Date().toISOString();
   return { project: normalized, settlement };
@@ -1076,6 +1076,16 @@ function firstNonBlank(...values) {
     if (text.trim()) return text;
   }
   return '';
+}
+
+function mergeLedgerText(existing = '', incoming = '') {
+  const entries = [];
+  for (const value of [existing, incoming]) {
+    for (const entry of asString(value, '').split(/\n+/).map((item) => item.trim()).filter(Boolean)) {
+      if (!entries.includes(entry)) entries.push(entry);
+    }
+  }
+  return entries.slice(-8).join('\n');
 }
 
 function deterministicId(prefix, item, index) {

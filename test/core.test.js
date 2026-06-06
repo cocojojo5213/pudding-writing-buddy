@@ -247,6 +247,31 @@ test('settlement refreshes stale summaries from the current body', () => {
   assert.doesNotMatch(settled.chapters[0].summary, /旧摘要/);
 });
 
+test('settlement appends truth ledger notes instead of overwriting old state', () => {
+  const project = normalizeProject(createDefaultProject());
+  project.characters[0].knowledge = '旧知识：林澈只知道电梯异常。';
+  project.hooks[0].note = '旧伏笔备注：缴费单来自上一章。';
+  project.resources[0].note = '旧资源备注：缴费单原件在林澈口袋。';
+  project.chapters = [{
+    id: 'append-ledger-state',
+    title: '第2章 状态追加',
+    body: '林澈把未来日期的医院缴费单贴在窗上。许闻说：“电梯第十三层按钮亮了。”',
+    plan: '',
+    audit: '',
+    summary: '',
+    status: 'draft'
+  }];
+
+  const { project: settled } = applySettlement(project, project.chapters[0]);
+
+  assert.match(settled.characters[0].knowledge, /旧知识：林澈只知道电梯异常。/);
+  assert.match(settled.characters[0].knowledge, /第2章 状态追加/);
+  assert.match(settled.hooks[0].note, /旧伏笔备注：缴费单来自上一章。/);
+  assert.match(settled.hooks[0].note, /已在第2章 状态追加触碰/);
+  assert.match(settled.resources[0].note, /旧资源备注：缴费单原件在林澈口袋。/);
+  assert.match(settled.resources[0].note, /在第2章 状态追加出现或被使用/);
+});
+
 test('project metrics and mixed-language length counting are stable', () => {
   const project = normalizeProject({
     ...createDefaultProject(),
