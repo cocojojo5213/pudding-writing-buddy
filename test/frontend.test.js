@@ -493,6 +493,79 @@ test('chapter switches cannot retarget generated output while a guarded action i
   assert.equal(dom.byId('chapterTitle').value, '第1章计划：锁定章节');
 });
 
+test('locked form edits and removes cannot pollute generated saves', async () => {
+  const dom = createDomHarness();
+  let project = {
+    ...createDefaultProject(),
+    title: 'Original Locked Title',
+    chapters: [{
+      id: 'locked-form-chapter',
+      title: '第1章',
+      body: '原始正文不能被锁内输入覆盖。',
+      plan: '',
+      audit: '',
+      summary: '',
+      status: 'draft',
+      createdAt: '',
+      settledAt: ''
+    }]
+  };
+  const originalCharacterCount = project.characters.length;
+  const savePayloads = [];
+  let releaseAssist;
+
+  globalThis.document = dom.document;
+  globalThis.window = dom.window;
+  globalThis.localStorage = createStorage();
+  globalThis.fetch = async (requestPath, options = {}) => {
+    if (requestPath === '/api/project' && options.method === 'POST') {
+      const payload = JSON.parse(options.body);
+      savePayloads.push(payload);
+      project = {
+        ...payload.project,
+        versionToken: `locked-form-token-${savePayloads.length}`,
+        updatedAt: `2026-06-07T00:00:3${savePayloads.length}.000Z`
+      };
+      return jsonResponse(project);
+    }
+    if (requestPath === '/api/assist' && options.method === 'POST') {
+      const payload = JSON.parse(options.body);
+      assert.equal(payload.task, 'plan');
+      assert.equal(payload.project.title, 'Original Locked Title');
+      assert.equal(payload.project.chapters[0].body, '原始正文不能被锁内输入覆盖。');
+      return await new Promise((resolve) => {
+        releaseAssist = () => resolve(jsonResponse({ output: '# 第1章计划：锁内表单\n\n章节目标：确认锁内输入不会污染保存。' }));
+      });
+    }
+    if (requestPath === '/api/project') return jsonResponse(project);
+    throw new Error(`Unexpected fetch: ${requestPath}`);
+  };
+
+  const moduleUrl = pathToFileURL(path.join(APP_ROOT, 'public/app.js'));
+  await import(`${moduleUrl.href}?frontend-test=${Date.now()}`);
+  await waitFor(() => dom.byId('save-state').textContent === 'Ready');
+  await waitFor(() => dom.removeButtons('characters').length === originalCharacterCount);
+
+  dom.byId('plan').click();
+  await waitFor(() => Boolean(releaseAssist));
+  assert.equal(dom.byId('title').disabled, true);
+  assert.equal(dom.byId('chapterBody').disabled, true);
+  assert.equal(dom.removeButtons('characters')[0].disabled, true);
+
+  dom.byId('title').value = 'Injected Locked Title';
+  dom.byId('title').dispatchEvent({ type: 'input' });
+  dom.byId('chapterBody').value = '锁内脚本输入不应进入保存。';
+  dom.byId('chapterBody').dispatchEvent({ type: 'input' });
+  dom.removeButtons('characters')[0].click();
+  releaseAssist();
+
+  await waitFor(() => savePayloads.length === 1 && dom.byId('save-state').textContent === 'Saved');
+  assert.equal(savePayloads[0].project.title, 'Original Locked Title');
+  assert.equal(savePayloads[0].project.chapters[0].body, '原始正文不能被锁内输入覆盖。');
+  assert.equal(savePayloads[0].project.characters.length, originalCharacterCount);
+  assert.match(savePayloads[0].project.chapters[0].plan, /锁内表单/);
+});
+
 function jsonResponse(body, status = 200) {
   return {
     ok: status >= 200 && status < 300,
@@ -522,6 +595,7 @@ function createDomHarness(options = {}) {
   const elements = new Map();
   const allElements = [];
   let chapterButtons = [];
+  const removeButtonsByContainer = new Map();
 
   const register = (element) => {
     allElements.push(element);
@@ -584,6 +658,7 @@ function createDomHarness(options = {}) {
     DIV: ['metrics', 'chapter-metrics', 'characters', 'hooks', 'outline', 'timeline', 'resources', 'arcs', 'chapters', 'save-state'],
     SECTION: ['brief-view', 'board-view', 'state-view', 'write-view', 'export-view']
   };
+  const collectionContainerIds = ['characters', 'hooks', 'outline', 'timeline', 'resources', 'arcs'];
 
   for (const [tagName, ids] of Object.entries(idsByTag)) {
     for (const id of ids) {
@@ -593,6 +668,10 @@ function createDomHarness(options = {}) {
           ? (html) => {
             chapterButtons = parseChapterButtons(html);
           }
+          : collectionContainerIds.includes(id)
+            ? (html) => {
+              removeButtonsByContainer.set(id, parseRemoveButtons(html));
+            }
           : null
       }));
       elements.set(id, element);
@@ -622,10 +701,13 @@ function createDomHarness(options = {}) {
       if (selector === 'button, input, textarea, select') {
         return [
           ...allElements.filter((element) => ['BUTTON', 'INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName)),
-          ...chapterButtons
+          ...chapterButtons,
+          ...dynamicRemoveButtons()
         ];
       }
       if (selector === '[data-chapter]') return chapterButtons;
+      const removeMatch = selector.match(/^\[data-remove="([^"]+)"\]$/);
+      if (removeMatch) return dynamicRemoveButtons().filter((button) => button.dataset.remove === removeMatch[1]);
       if (selector.includes('[data-type=') || selector.includes('[data-remove=')) return [];
       return [];
     },
@@ -646,8 +728,15 @@ function createDomHarness(options = {}) {
     },
     chapterButtons() {
       return chapterButtons;
+    },
+    removeButtons(type) {
+      return dynamicRemoveButtons().filter((button) => button.dataset.remove === type);
     }
   };
+
+  function dynamicRemoveButtons() {
+    return [...removeButtonsByContainer.values()].flat();
+  }
 }
 
 class TestElement {
@@ -723,6 +812,29 @@ function parseChapterButtons(html) {
     }));
   }
   return buttons;
+}
+
+function parseRemoveButtons(html) {
+  const buttons = [];
+  const regex = /<button\b([^>]*)>/g;
+  let match;
+  while ((match = regex.exec(html))) {
+    const remove = getHtmlAttribute(match[1], 'data-remove');
+    const id = getHtmlAttribute(match[1], 'data-id');
+    if (!remove || !id) continue;
+    buttons.push(new TestElement('BUTTON', {
+      dataset: {
+        remove: decodeHtmlAttribute(remove),
+        id: decodeHtmlAttribute(id)
+      }
+    }));
+  }
+  return buttons;
+}
+
+function getHtmlAttribute(attributes, name) {
+  const match = String(attributes).match(new RegExp(`${name}="([^"]*)"`));
+  return match ? match[1] : '';
 }
 
 function decodeHtmlAttribute(value) {

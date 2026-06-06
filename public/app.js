@@ -90,7 +90,7 @@ function bindStaticControls() {
   projectFields.forEach((field) => {
     const element = $(`#${field}`);
     bindValueListener(element, () => {
-      if (!state.ready) return;
+      if (!canMutateProject()) return;
       state.project[field] = field === 'targetWords' ? Number(element.value) : element.value;
       scheduleSave();
       renderMetrics();
@@ -293,6 +293,7 @@ function renderEditor() {
 function bindCollectionInputs(type) {
   $$(`[data-type="${type}"] input, [data-type="${type}"] textarea, [data-type="${type}"] select`).forEach((input) => {
     bindValueListener(input, () => {
+      if (!canMutateProject()) return;
       const card = input.closest('[data-id]');
       const item = state.project[type].find((entry) => entry.id === card.dataset.id);
       if (!item) return;
@@ -307,11 +308,7 @@ function bindCollectionInputs(type) {
   });
 
   $$(`[data-remove="${type}"]`).forEach((button) => {
-    button.addEventListener('click', () => {
-      state.project[type] = state.project[type].filter((item) => item.id !== button.dataset.id);
-      scheduleSave();
-      render();
-    });
+    button.addEventListener('click', () => guardAction(() => removeItem(type, button.dataset.id)));
   });
 }
 
@@ -321,6 +318,12 @@ function bindValueListener(element, handler) {
 
 function addItem(type, item) {
   state.project[type].push(item);
+  scheduleSave();
+  render();
+}
+
+function removeItem(type, itemId) {
+  state.project[type] = state.project[type].filter((item) => item.id !== itemId);
   scheduleSave();
   render();
 }
@@ -350,6 +353,7 @@ function createChapter() {
 }
 
 function updateSelectedChapterFromEditor() {
+  if (!canMutateProject()) return;
   let chapter = selectedChapter();
   const createdFromEditor = !chapter;
   if (!chapter) {
@@ -378,7 +382,7 @@ async function runPlan() {
   markDirty();
   renderEditor();
   renderChapters();
-  await saveProject();
+  await saveProject({ collectInputs: false });
 }
 
 async function runContext() {
@@ -398,7 +402,7 @@ async function runDraft() {
   renderEditor();
   renderChapters();
   renderMetrics();
-  await saveProject();
+  await saveProject({ collectInputs: false });
 }
 
 async function runAudit() {
@@ -411,7 +415,7 @@ async function runAudit() {
   markDirty();
   renderEditor();
   renderMetrics();
-  await saveProject();
+  await saveProject({ collectInputs: false });
 }
 
 async function runRevise() {
@@ -425,7 +429,7 @@ async function runRevise() {
   renderEditor();
   renderChapters();
   renderMetrics();
-  await saveProject();
+  await saveProject({ collectInputs: false });
 }
 
 async function runStyle() {
@@ -436,7 +440,7 @@ async function runStyle() {
   $('#output').value = output;
   markDirty();
   showView('export');
-  await saveProject();
+  await saveProject({ collectInputs: false });
 }
 
 async function runSettle() {
@@ -559,11 +563,11 @@ function collectProjectInputs() {
   }
 }
 
-async function saveProject() {
+async function saveProject({ collectInputs = true } = {}) {
   cancelPendingSave();
   const previous = state.saveInFlight || Promise.resolve();
   const queued = previous.catch(() => {}).then(async () => {
-    collectProjectInputs();
+    if (collectInputs) collectProjectInputs();
     const saveRevision = state.revision;
     const snapshot = cloneProject(state.project);
     setSaveState('Saving', 'warn');
@@ -718,6 +722,10 @@ function canUseBeforeProjectLoad(element) {
     || element.id === 'save-model'
     || element.id === 'output'
     || modelFields.includes(element.id);
+}
+
+function canMutateProject() {
+  return state.ready && !state.busy && !state.actionLocked;
 }
 
 function showActionError(error, label = 'Error') {
