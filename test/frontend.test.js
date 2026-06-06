@@ -350,6 +350,73 @@ test('flushSave retries dirty revisions after an in-flight autosave failure', as
   }
 });
 
+test('add actions cannot mutate the project while a guarded action is running', async () => {
+  const dom = createDomHarness();
+  let project = {
+    ...createDefaultProject(),
+    chapters: [{
+      id: 'guarded-action-chapter',
+      title: '第1章',
+      body: '',
+      plan: '',
+      audit: '',
+      summary: '',
+      status: 'draft',
+      createdAt: '',
+      settledAt: ''
+    }]
+  };
+  const originalCharacterCount = project.characters.length;
+  const savePayloads = [];
+  let releaseAssist;
+
+  globalThis.document = dom.document;
+  globalThis.window = dom.window;
+  globalThis.localStorage = createStorage();
+  globalThis.fetch = async (requestPath, options = {}) => {
+    if (requestPath === '/api/project' && options.method === 'POST') {
+      const payload = JSON.parse(options.body);
+      savePayloads.push(payload);
+      project = {
+        ...payload.project,
+        versionToken: `guarded-token-${savePayloads.length}`,
+        updatedAt: `2026-06-07T00:00:1${savePayloads.length}.000Z`
+      };
+      return jsonResponse(project);
+    }
+    if (requestPath === '/api/assist' && options.method === 'POST') {
+      const payload = JSON.parse(options.body);
+      assert.equal(payload.task, 'plan');
+      assert.equal(payload.project.chapters.length, 1);
+      return await new Promise((resolve) => {
+        releaseAssist = () => resolve(jsonResponse({ output: '# 第1章计划：锁内生成\n\n章节目标：验证按钮写入不会插队。' }));
+      });
+    }
+    if (requestPath === '/api/project') return jsonResponse(project);
+    throw new Error(`Unexpected fetch: ${requestPath}`);
+  };
+
+  const moduleUrl = pathToFileURL(path.join(APP_ROOT, 'public/app.js'));
+  await import(`${moduleUrl.href}?frontend-test=${Date.now()}`);
+  await waitFor(() => dom.byId('save-state').textContent === 'Ready');
+
+  dom.byId('plan').click();
+  await waitFor(() => Boolean(releaseAssist));
+  assert.equal(dom.byId('add-character').disabled, true);
+  assert.equal(dom.byId('add-chapter').disabled, true);
+
+  dom.byId('add-character').click();
+  dom.byId('add-chapter').click();
+  releaseAssist();
+
+  await waitFor(() => savePayloads.length === 1 && dom.byId('save-state').textContent === 'Saved');
+  assert.equal(savePayloads[0].project.characters.length, originalCharacterCount);
+  assert.equal(savePayloads[0].project.chapters.length, 1);
+  assert.equal(savePayloads[0].project.chapters[0].id, 'guarded-action-chapter');
+  assert.match(savePayloads[0].project.chapters[0].plan, /锁内生成/);
+  assert.equal(dom.byId('save-state').textContent, 'Saved');
+});
+
 function jsonResponse(body, status = 200) {
   return {
     ok: status >= 200 && status < 300,
