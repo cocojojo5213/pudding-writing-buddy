@@ -24,6 +24,12 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const REQUEST_BASE_URL = 'http://127.0.0.1';
 const MAX_BODY_BYTES = 5_000_000;
 const MODEL_TIMEOUT_MS = 120_000;
+const DEFAULT_MODEL_TEMPERATURE = 0.75;
+const MIN_MODEL_TEMPERATURE = 0;
+const MAX_MODEL_TEMPERATURE = 2;
+const DEFAULT_MODEL_MAX_TOKENS = 3500;
+const MIN_MODEL_MAX_TOKENS = 500;
+const MAX_MODEL_MAX_TOKENS = 20_000;
 const STALE_TEMP_MS = Number(process.env.STALE_TEMP_MS || 24 * 60 * 60 * 1000);
 let projectWriteQueue = Promise.resolve();
 
@@ -361,25 +367,28 @@ function sendPlainText(response, status, text, method = 'GET', headers = {}) {
 }
 
 function isUsableModelConfig(config) {
-  return Boolean(config?.baseUrl && config?.apiKey && config?.model);
+  return Boolean(
+    toTrimmedString(config?.baseUrl)
+    && toTrimmedString(config?.apiKey)
+    && toTrimmedString(config?.model)
+  );
 }
 
 async function callModel(task, project, payload, config) {
-  const baseUrl = String(config.baseUrl).replace(/\/+$/, '');
-  const endpoint = `${baseUrl}/chat/completions`;
+  const modelConfig = normalizeModelConfig(config);
   const prompt = buildPrompt(task, project, payload);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), MODEL_TIMEOUT_MS);
   try {
-    const result = await fetch(endpoint, {
+    const result = await fetch(modelConfig.endpoint, {
       method: 'POST',
       signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${config.apiKey}`
+        Authorization: `Bearer ${modelConfig.apiKey}`
       },
       body: JSON.stringify({
-        model: config.model,
+        model: modelConfig.model,
         messages: [
           {
             role: 'system',
@@ -390,8 +399,8 @@ async function callModel(task, project, payload, config) {
             content: prompt
           }
         ],
-        temperature: Number.isFinite(Number(config.temperature)) ? Number(config.temperature) : 0.75,
-        max_tokens: Number.isFinite(Number(config.maxTokens)) ? Number(config.maxTokens) : 3500
+        temperature: modelConfig.temperature,
+        max_tokens: modelConfig.maxTokens
       })
     });
     const text = await result.text();
@@ -409,6 +418,57 @@ async function callModel(task, project, payload, config) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function normalizeModelConfig(config) {
+  return {
+    endpoint: buildModelEndpoint(toTrimmedString(config?.baseUrl)),
+    apiKey: toTrimmedString(config?.apiKey),
+    model: toTrimmedString(config?.model),
+    temperature: boundedNumber(config?.temperature, {
+      defaultValue: DEFAULT_MODEL_TEMPERATURE,
+      min: MIN_MODEL_TEMPERATURE,
+      max: MAX_MODEL_TEMPERATURE
+    }),
+    maxTokens: boundedInteger(config?.maxTokens, {
+      defaultValue: DEFAULT_MODEL_MAX_TOKENS,
+      min: MIN_MODEL_MAX_TOKENS,
+      max: MAX_MODEL_MAX_TOKENS
+    })
+  };
+}
+
+function buildModelEndpoint(baseUrlValue) {
+  let url;
+  try {
+    url = new URL(baseUrlValue);
+  } catch {
+    throw new HttpError(400, 'Model base URL must be a valid http(s) URL.');
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new HttpError(400, 'Model base URL must use http or https.');
+  }
+  if (url.search || url.hash) {
+    throw new HttpError(400, 'Model base URL must not include query strings or fragments.');
+  }
+  url.pathname = `${url.pathname.replace(/\/+$/, '')}/chat/completions`;
+  return url.toString();
+}
+
+function toTrimmedString(value) {
+  return typeof value === 'string' ? value.trim() : String(value ?? '').trim();
+}
+
+function boundedNumber(value, { defaultValue, min, max }) {
+  const raw = toTrimmedString(value);
+  if (!raw) return defaultValue;
+  const number = Number(raw);
+  if (!Number.isFinite(number)) return defaultValue;
+  return Math.min(Math.max(number, min), max);
+}
+
+function boundedInteger(value, bounds) {
+  return Math.round(boundedNumber(value, bounds));
 }
 
 function extractModelText(json) {

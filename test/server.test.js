@@ -318,6 +318,108 @@ test('api reports non-json successful model responses clearly', async () => {
   }
 });
 
+test('api normalizes model config before proxying requests', async () => {
+  const proxiedRequests = [];
+  const model = await startMockModel(async (request, response) => {
+    proxiedRequests.push({
+      url: request.url,
+      authorization: request.headers.authorization,
+      body: await readRequestJson(request)
+    });
+    response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    response.end(JSON.stringify({
+      choices: [{ message: { content: 'normalized model request' } }]
+    }));
+  });
+  const app = await startApp();
+  try {
+    const response = await requestJson(app.baseUrl, '/api/assist', {
+      method: 'POST',
+      body: JSON.stringify({
+        task: 'plan',
+        modelConfig: {
+          baseUrl: `  ${model.baseUrl}/v1/  `,
+          apiKey: '  test-key  ',
+          model: '  test-model  ',
+          temperature: '9',
+          maxTokens: '250000'
+        }
+      })
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.output, 'normalized model request');
+    assert.equal(proxiedRequests[0].url, '/v1/chat/completions');
+    assert.equal(proxiedRequests[0].authorization, 'Bearer test-key');
+    assert.equal(proxiedRequests[0].body.model, 'test-model');
+    assert.equal(proxiedRequests[0].body.temperature, 2);
+    assert.equal(proxiedRequests[0].body.max_tokens, 20000);
+
+    const lowResponse = await requestJson(app.baseUrl, '/api/assist', {
+      method: 'POST',
+      body: JSON.stringify({
+        task: 'plan',
+        modelConfig: {
+          baseUrl: model.baseUrl,
+          apiKey: 'test-key',
+          model: 'test-model',
+          temperature: '-4',
+          maxTokens: '-200'
+        }
+      })
+    });
+
+    assert.equal(lowResponse.status, 200);
+    assert.equal(proxiedRequests[1].body.temperature, 0);
+    assert.equal(proxiedRequests[1].body.max_tokens, 500);
+
+    const defaultResponse = await requestJson(app.baseUrl, '/api/assist', {
+      method: 'POST',
+      body: JSON.stringify({
+        task: 'plan',
+        modelConfig: {
+          baseUrl: model.baseUrl,
+          apiKey: 'test-key',
+          model: 'test-model',
+          temperature: 'not-a-number',
+          maxTokens: 'Infinity'
+        }
+      })
+    });
+
+    assert.equal(defaultResponse.status, 200);
+    assert.equal(proxiedRequests[2].body.temperature, 0.75);
+    assert.equal(proxiedRequests[2].body.max_tokens, 3500);
+  } finally {
+    await app.stop();
+    await model.stop();
+  }
+});
+
+test('api rejects unsafe model base URLs before proxying', async () => {
+  const app = await startApp();
+  try {
+    for (const baseUrl of ['ftp://example.test/v1', 'https://example.test/v1?key=value']) {
+      const response = await requestJson(app.baseUrl, '/api/assist', {
+        method: 'POST',
+        body: JSON.stringify({
+          task: 'plan',
+          modelConfig: {
+            baseUrl,
+            apiKey: 'test-key',
+            model: 'test-model'
+          }
+        })
+      });
+
+      assert.equal(response.status, 400);
+      assert.match(response.body.error, /Model base URL/);
+    }
+  } finally {
+    await app.stop();
+  }
+});
+
 test('api extracts text from common OpenAI-compatible model response shapes', async () => {
   const model = await startMockModel(async (request, response) => {
     const body = await readRequestJson(request);
