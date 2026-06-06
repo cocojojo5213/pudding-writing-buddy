@@ -87,7 +87,7 @@ function bindStaticControls() {
 
   projectFields.forEach((field) => {
     const element = $(`#${field}`);
-    element.addEventListener('input', () => {
+    bindValueListener(element, () => {
       if (!state.ready) return;
       state.project[field] = field === 'targetWords' ? Number(element.value) : element.value;
       scheduleSave();
@@ -288,7 +288,7 @@ function renderEditor() {
 
 function bindCollectionInputs(type) {
   $$(`[data-type="${type}"] input, [data-type="${type}"] textarea, [data-type="${type}"] select`).forEach((input) => {
-    input.addEventListener('input', () => {
+    bindValueListener(input, () => {
       const card = input.closest('[data-id]');
       const item = state.project[type].find((entry) => entry.id === card.dataset.id);
       if (!item) return;
@@ -309,6 +309,10 @@ function bindCollectionInputs(type) {
       render();
     });
   });
+}
+
+function bindValueListener(element, handler) {
+  element.addEventListener(element.tagName === 'SELECT' ? 'change' : 'input', handler);
 }
 
 function addItem(type, item) {
