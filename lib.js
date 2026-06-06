@@ -773,7 +773,7 @@ export function exportMarkdown(project) {
     '',
     '## 大纲',
     '',
-    ...normalized.outline.map((node, index) => `${index + 1}. ${node.title}: ${node.summary}`),
+    ...normalized.outline.map((node, index) => `${index + 1}. ${formatInlineText(node.title, '未命名节点')}: ${formatInlineText(node.summary, '未记录')}`),
     '',
     '## 正文',
     ''
@@ -906,26 +906,30 @@ function normalizeChapter(item = {}, fallbackId = deterministicId('chapter', ite
 }
 
 function formatCharacterLine(character) {
-  return `- ${character.name || '未命名'} / ${character.role || '角色'}: 目标=${character.desire || '未设定'}; 冲突=${character.conflict || '未设定'}; 秘密=${character.secret || '未设定'}; 最近=${character.lastSeen || '未记录'}; 知识=${character.knowledge || '未记录'}`;
+  return `- ${formatInlineText(character.name, '未命名')} / ${formatInlineText(character.role, '角色')}: 目标=${formatInlineText(character.desire, '未设定')}; 冲突=${formatInlineText(character.conflict, '未设定')}; 秘密=${formatInlineText(character.secret, '未设定')}; 最近=${formatInlineText(character.lastSeen, '未记录')}; 知识=${formatInlineText(character.knowledge, '未记录')}`;
 }
 
 function formatHookLine(hook) {
-  return `- [${hook.status || 'open'}] ${hook.text || '未命名伏笔'}（种下：${hook.plantedIn || '未记录'}；回收：${hook.payoffBy || '未设定'}；备注：${hook.note || '无'}）`;
+  return `- [${formatInlineText(hook.status, 'open')}] ${formatInlineText(hook.text, '未命名伏笔')}（种下：${formatInlineText(hook.plantedIn, '未记录')}；回收：${formatInlineText(hook.payoffBy, '未设定')}；备注：${formatInlineText(hook.note, '无')}）`;
 }
 
 function formatResourceLine(resource) {
-  return `- ${resource.owner || '未知持有者'} / ${resource.item || '未命名资源'} x${resource.quantity || '?'}: ${resource.status || '未记录'}；${resource.note || '无备注'}`;
+  return `- ${formatInlineText(resource.owner, '未知持有者')} / ${formatInlineText(resource.item, '未命名资源')} x${formatInlineText(resource.quantity, '?')}: ${formatInlineText(resource.status, '未记录')}；${formatInlineText(resource.note, '无备注')}`;
 }
 
 function formatArcLine(arc) {
-  return `- ${arc.character || '未命名'}: ${arc.start || '起点未设定'} -> ${arc.current || '当前未设定'} -> ${arc.target || '目标未设定'}；压力=${arc.pressure || '未设定'}`;
+  return `- ${formatInlineText(arc.character, '未命名')}: ${formatInlineText(arc.start, '起点未设定')} -> ${formatInlineText(arc.current, '当前未设定')} -> ${formatInlineText(arc.target, '目标未设定')}；压力=${formatInlineText(arc.pressure, '未设定')}`;
 }
 
 function formatTimelineLine(event) {
-  return `- ${event.chapter || '未记录章节'}: ${event.event || '未记录事件'}；后果=${event.consequence || '未记录'}`;
+  return `- ${formatInlineText(event.chapter, '未记录章节')}: ${formatInlineText(event.event, '未记录事件')}；后果=${formatInlineText(event.consequence, '未记录')}`;
 }
 
 function formatMarkdownHeading(value, fallback) {
+  return formatInlineText(value, fallback);
+}
+
+function formatInlineText(value, fallback = '') {
   return asString(value, fallback).replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim() || fallback;
 }
 

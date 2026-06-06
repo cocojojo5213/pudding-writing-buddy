@@ -101,6 +101,30 @@ test('style analysis and export include expected sections', () => {
   assert.match(markdown, /### Opening/);
 });
 
+test('export keeps ledger fields on one markdown line', () => {
+  const project = normalizeProject({
+    title: 'Clean Export',
+    characters: [{ name: '阿宁\n## Injected', role: '调查员', desire: '查案\n- 伪列表' }],
+    hooks: [{ text: '旧照片\n## Hook Break', status: 'open', note: '背面有字\n- 假条目' }],
+    resources: [{ owner: '阿宁\n## Owner', item: '旧照片\n## Item', note: '口袋\n- 假条目' }],
+    arcs: [{ character: '阿宁\n## Arc', start: '怀疑\n## Start' }],
+    timeline: [{ chapter: '前史\n## Time', event: '旧案发生\n## Event' }],
+    outline: [{ title: '旧案重启\n## Beat', summary: '发现线索\n- 假列表' }]
+  });
+
+  const markdown = exportMarkdown(project);
+
+  assert.doesNotMatch(markdown, /^## Injected/m);
+  assert.doesNotMatch(markdown, /^## Hook Break/m);
+  assert.doesNotMatch(markdown, /^## Owner/m);
+  assert.doesNotMatch(markdown, /^## Arc/m);
+  assert.doesNotMatch(markdown, /^## Time/m);
+  assert.doesNotMatch(markdown, /^## Beat/m);
+  assert.doesNotMatch(markdown, /^- 假条目/m);
+  assert.match(markdown, /阿宁 ## Injected/);
+  assert.match(markdown, /旧案重启 ## Beat: 发现线索 - 假列表/);
+});
+
 test('context packet includes state ledgers for long-form continuity', () => {
   const project = normalizeProject(createDefaultProject());
   const context = buildContextPacket(project, 1);
