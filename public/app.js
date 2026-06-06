@@ -768,17 +768,32 @@ function saveModelConfig() {
 function loadModelConfig() {
   let config = {};
   try {
-    config = JSON.parse(localStorage.getItem('novel-copilot-model') || '{}');
-  } catch {
-    try {
-      localStorage.removeItem('novel-copilot-model');
-    } catch {
-      // Browser storage can be unavailable; defaults still keep the app usable.
+    const stored = JSON.parse(localStorage.getItem('novel-copilot-model') || '{}');
+    if (isPlainObject(stored)) {
+      config = stored;
+    } else {
+      clearStoredModelConfig();
     }
+  } catch {
+    clearStoredModelConfig();
   }
   for (const field of modelFields) {
-    $(`#${field}`).value = config[field] || defaultModelValue(field);
+    $(`#${field}`).value = modelConfigValue(config, field);
   }
+}
+
+function clearStoredModelConfig() {
+  try {
+    localStorage.removeItem('novel-copilot-model');
+  } catch {
+    // Browser storage can be unavailable; defaults still keep the app usable.
+  }
+}
+
+function modelConfigValue(config, field) {
+  const value = config[field];
+  if (value === undefined || value === null || typeof value === 'object') return defaultModelValue(field);
+  return String(value) || defaultModelValue(field);
 }
 
 function getModelConfig() {
@@ -873,6 +888,10 @@ function createId() {
 
 function cloneProject(project) {
   return JSON.parse(JSON.stringify(project));
+}
+
+function isPlainObject(value) {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
 function countLength(text = '') {
