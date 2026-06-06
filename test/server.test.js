@@ -288,6 +288,32 @@ test('api rejects empty chapter settlement without writing a blank chapter', asy
   }
 });
 
+test('api rejects malformed chapter settlement payloads without writing', async () => {
+  const app = await startApp();
+  try {
+    const project = (await requestJson(app.baseUrl, '/api/project')).body;
+    for (const chapter of ['not an object', [], null]) {
+      const response = await requestJson(app.baseUrl, '/api/settle', {
+        method: 'POST',
+        body: JSON.stringify({
+          project,
+          expectedVersionToken: project.versionToken,
+          chapter
+        })
+      });
+
+      assert.equal(response.status, 400);
+      assert.match(response.body.error, /Chapter payload must be an object/);
+    }
+
+    const saved = JSON.parse(await readFile(path.join(app.dataDir, 'project.json'), 'utf8'));
+    assert.equal(saved.chapters.length, 0);
+    assert.equal(saved.versionToken, project.versionToken);
+  } finally {
+    await app.stop();
+  }
+});
+
 test('api settlement uses saved chapter text when client sends only a chapter id', async () => {
   const app = await startApp();
   try {
