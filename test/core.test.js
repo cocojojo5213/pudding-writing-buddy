@@ -30,6 +30,11 @@ test('normalizes partial projects with core writing lists', () => {
   assert.equal(project.schemaVersion, 2);
 });
 
+test('normalization rounds legacy fractional target word counts', () => {
+  const project = normalizeProject({ targetWords: '1200.5' });
+  assert.equal(project.targetWords, 1201);
+});
+
 test('normalization preserves timestamps and exported default is immutable', () => {
   const updatedAt = '2024-01-02T03:04:05.000Z';
   const project = normalizeProject({ ...createDefaultProject(), updatedAt });

@@ -282,7 +282,7 @@ test('api rejects project saves without a complete project payload', async () =>
     assert.equal(malformedScalarProject.status, 400);
     assert.match(malformedScalarProject.body.error, /Malformed fields: title/);
 
-    for (const targetWords of [299, 20_001]) {
+    for (const targetWords of [299, 20_001, 1200.5, '1200.5']) {
       const malformedTargetWords = {
         ...savedProject.body,
         targetWords

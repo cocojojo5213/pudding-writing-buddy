@@ -115,7 +115,7 @@ test('invalid target words are shown locally and not autosaved', async () => {
     await import(`${moduleUrl.href}?frontend-test=${Date.now()}`);
     await waitFor(() => dom.byId('save-state').textContent === 'Ready');
 
-    dom.byId('targetWords').value = '25000';
+    dom.byId('targetWords').value = '1200.5';
     dom.byId('targetWords').dispatchEvent({ type: 'input' });
     await new Promise((resolve) => setTimeout(resolve, 850));
 
@@ -123,7 +123,7 @@ test('invalid target words are shown locally and not autosaved', async () => {
     assert.equal(dom.byId('save-state').textContent, 'Target error');
 
     dom.byId('save-project').click();
-    await waitFor(() => dom.byId('output').value.includes('Target words must be between 300 and 20000.'));
+    await waitFor(() => dom.byId('output').value.includes('Target words must be a whole number between 300 and 20000.'));
 
     assert.equal(savedPayloads.length, 0);
 

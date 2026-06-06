@@ -481,7 +481,7 @@ function isTargetWordsValue(value) {
   const text = String(value).trim();
   if (!text) return false;
   const number = Number(text);
-  return Number.isFinite(number) && number >= MIN_TARGET_WORDS && number <= MAX_TARGET_WORDS;
+  return Number.isInteger(number) && number >= MIN_TARGET_WORDS && number <= MAX_TARGET_WORDS;
 }
 
 function hasControlCharacters(value) {

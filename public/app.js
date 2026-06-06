@@ -33,7 +33,7 @@ const projectFields = [
 const modelFields = ['baseUrl', 'model', 'apiKey', 'temperature', 'maxTokens'];
 const MIN_TARGET_WORDS = 300;
 const MAX_TARGET_WORDS = 20000;
-const TARGET_WORDS_ERROR_MESSAGE = `Target words must be between ${MIN_TARGET_WORDS} and ${MAX_TARGET_WORDS}.`;
+const TARGET_WORDS_ERROR_MESSAGE = `Target words must be a whole number between ${MIN_TARGET_WORDS} and ${MAX_TARGET_WORDS}.`;
 
 init();
 
@@ -817,7 +817,7 @@ function readProjectFieldValue(field, element, throwOnError = true) {
 function isTargetWordsValue(rawValue) {
   const trimmed = String(rawValue ?? '').trim();
   const value = Number(trimmed);
-  return Boolean(trimmed) && Number.isFinite(value) && value >= MIN_TARGET_WORDS && value <= MAX_TARGET_WORDS;
+  return Boolean(trimmed) && Number.isInteger(value) && value >= MIN_TARGET_WORDS && value <= MAX_TARGET_WORDS;
 }
 
 function readTargetWordsValue(rawValue, throwOnError = true) {

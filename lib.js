@@ -151,7 +151,7 @@ export function normalizeProject(input = {}) {
   merged.genre = asString(merged.genre, base.genre);
   merged.logline = asString(merged.logline, base.logline);
   merged.protagonist = asString(merged.protagonist, base.protagonist);
-  merged.targetWords = clampNumber(merged.targetWords, MIN_TARGET_WORDS, MAX_TARGET_WORDS, base.targetWords);
+  merged.targetWords = clampInteger(merged.targetWords, MIN_TARGET_WORDS, MAX_TARGET_WORDS, base.targetWords);
   merged.language = merged.language === 'en' ? 'en' : 'zh';
   merged.authorIntent = asString(merged.authorIntent, base.authorIntent);
   merged.currentFocus = asString(merged.currentFocus, base.currentFocus);
@@ -1195,6 +1195,11 @@ function clampNumber(value, min, max, fallback) {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
   return Math.min(max, Math.max(min, number));
+}
+
+function clampInteger(value, min, max, fallback) {
+  const number = clampNumber(value, min, max, fallback);
+  return Math.round(number);
 }
 
 function isPlainObject(value) {
