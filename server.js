@@ -482,9 +482,12 @@ function assertCompleteProjectPayload(project) {
 }
 
 function isTargetWordsValue(value) {
-  if (typeof value !== 'number' && typeof value !== 'string') return false;
-  const text = String(value).trim();
-  if (!text) return false;
+  if (typeof value === 'number') {
+    return Number.isInteger(value) && value >= MIN_TARGET_WORDS && value <= MAX_TARGET_WORDS;
+  }
+  if (typeof value !== 'string') return false;
+  const text = value.trim();
+  if (!/^[+-]?\d+$/.test(text)) return false;
   const number = Number(text);
   return Number.isInteger(number) && number >= MIN_TARGET_WORDS && number <= MAX_TARGET_WORDS;
 }

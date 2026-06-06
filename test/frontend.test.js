@@ -145,6 +145,55 @@ test('invalid target words are shown locally and not autosaved', async () => {
   }
 });
 
+test('numeric-formatted target words are rejected before autosave', async () => {
+  const dom = createDomHarness();
+  const originalConsoleError = console.error;
+  const savedPayloads = [];
+  let project = createDefaultProject();
+
+  try {
+    console.error = () => {};
+    globalThis.document = dom.document;
+    globalThis.window = dom.window;
+    globalThis.localStorage = createStorage();
+    globalThis.fetch = async (requestPath, options = {}) => {
+      if (requestPath === '/api/project' && options.method === 'POST') {
+        const payload = JSON.parse(options.body);
+        savedPayloads.push(payload);
+        project = {
+          ...payload.project,
+          versionToken: `formatted-target-token-${savedPayloads.length}`,
+          updatedAt: `2026-06-07T00:02:0${savedPayloads.length}.000Z`
+        };
+        return jsonResponse(project);
+      }
+      if (requestPath === '/api/project') return jsonResponse(project);
+      throw new Error(`Unexpected fetch: ${requestPath}`);
+    };
+
+    const moduleUrl = pathToFileURL(path.join(APP_ROOT, 'public/app.js'));
+    await import(`${moduleUrl.href}?frontend-test=${Date.now()}`);
+    await waitFor(() => dom.byId('save-state').textContent === 'Ready');
+
+    for (const value of ['1200.0', '1e3', '0x500']) {
+      dom.byId('targetWords').value = value;
+      dom.byId('targetWords').dispatchEvent({ type: 'input' });
+      await new Promise((resolve) => setTimeout(resolve, 850));
+
+      assert.equal(savedPayloads.length, 0);
+      assert.equal(dom.byId('save-state').textContent, 'Target error');
+    }
+
+    dom.byId('targetWords').value = '1200';
+    dom.byId('targetWords').dispatchEvent({ type: 'input' });
+
+    await waitFor(() => savedPayloads.length === 1 && dom.byId('save-state').textContent === 'Saved', 2000);
+    assert.equal(savedPayloads[0].project.targetWords, 1200);
+  } finally {
+    console.error = originalConsoleError;
+  }
+});
+
 test('metrics refresh renders server metrics instead of stale local counts', async () => {
   const dom = createDomHarness();
   const project = createDefaultProject();

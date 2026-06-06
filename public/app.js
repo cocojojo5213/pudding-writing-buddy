@@ -816,8 +816,9 @@ function readProjectFieldValue(field, element, throwOnError = true) {
 
 function isTargetWordsValue(rawValue) {
   const trimmed = String(rawValue ?? '').trim();
+  if (!/^[+-]?\d+$/.test(trimmed)) return false;
   const value = Number(trimmed);
-  return Boolean(trimmed) && Number.isInteger(value) && value >= MIN_TARGET_WORDS && value <= MAX_TARGET_WORDS;
+  return Number.isInteger(value) && value >= MIN_TARGET_WORDS && value <= MAX_TARGET_WORDS;
 }
 
 function readTargetWordsValue(rawValue, throwOnError = true) {
