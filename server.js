@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   KNOWN_TASKS,
+  VALID_HOOK_STATUSES,
   applySettlement,
   buildPrompt,
   createDefaultProject,
@@ -49,6 +50,23 @@ const PROJECT_SCALAR_FIELDS = [
 ];
 const PROJECT_TEXT_FIELDS = PROJECT_SCALAR_FIELDS.filter((field) => field !== 'targetWords');
 const PROJECT_COLLECTION_FIELDS = ['characters', 'hooks', 'outline', 'timeline', 'resources', 'arcs', 'chapters'];
+const PROJECT_COLLECTION_ITEM_FIELDS = {
+  characters: ['id', 'name', 'role', 'desire', 'conflict', 'secret', 'lastSeen', 'knowledge'],
+  hooks: ['id', 'text', 'status', 'plantedIn', 'payoffBy', 'note'],
+  outline: ['id', 'title', 'summary'],
+  timeline: ['id', 'source', 'chapterId', 'chapter', 'event', 'consequence'],
+  resources: ['id', 'owner', 'item', 'quantity', 'status', 'note'],
+  arcs: ['id', 'character', 'start', 'current', 'target', 'pressure'],
+  chapters: ['id', 'title', 'body', 'plan', 'audit', 'summary', 'status', 'createdAt', 'settledAt']
+};
+const PROJECT_ENUM_FIELDS = {
+  language: ['zh', 'en']
+};
+const PROJECT_COLLECTION_ENUM_FIELDS = {
+  hooks: {
+    status: VALID_HOOK_STATUSES
+  }
+};
 let projectWriteQueue = Promise.resolve();
 
 const MIME_TYPES = {
@@ -375,18 +393,54 @@ function assertCompleteProjectPayload(project) {
   const missingFields = PROJECT_SCALAR_FIELDS.filter((field) => !Object.hasOwn(project, field));
   const malformedFields = PROJECT_TEXT_FIELDS.filter((field) => Object.hasOwn(project, field) && typeof project[field] !== 'string');
   if (Object.hasOwn(project, 'targetWords') && !isFiniteNumberValue(project.targetWords)) malformedFields.push('targetWords');
+  for (const [field, allowedValues] of Object.entries(PROJECT_ENUM_FIELDS)) {
+    if (Object.hasOwn(project, field) && typeof project[field] === 'string' && !allowedValues.includes(project[field])) {
+      malformedFields.push(field);
+    }
+  }
   const missing = PROJECT_COLLECTION_FIELDS.filter((field) => !Array.isArray(project[field]));
-  const malformedCollections = PROJECT_COLLECTION_FIELDS.flatMap((field) => {
-    if (!Array.isArray(project[field])) return [];
-    const badIndex = project[field].findIndex((item) => !isPlainObject(item));
-    return badIndex >= 0 ? [`${field}[${badIndex}]`] : [];
-  });
-  if (missingFields.length || malformedFields.length || missing.length || malformedCollections.length) {
+  const malformedCollectionItems = [];
+  const missingCollectionItemFields = [];
+  const malformedCollectionItemFields = [];
+  for (const field of PROJECT_COLLECTION_FIELDS) {
+    if (!Array.isArray(project[field])) continue;
+    const itemFields = PROJECT_COLLECTION_ITEM_FIELDS[field] || [];
+    const enumFields = PROJECT_COLLECTION_ENUM_FIELDS[field] || {};
+    project[field].forEach((item, index) => {
+      if (!isPlainObject(item)) {
+        malformedCollectionItems.push(`${field}[${index}]`);
+        return;
+      }
+      for (const itemField of itemFields) {
+        const fieldPath = `${field}[${index}].${itemField}`;
+        if (!Object.hasOwn(item, itemField)) {
+          missingCollectionItemFields.push(fieldPath);
+        } else if (typeof item[itemField] !== 'string') {
+          malformedCollectionItemFields.push(fieldPath);
+        }
+      }
+      for (const [itemField, allowedValues] of Object.entries(enumFields)) {
+        if (typeof item[itemField] === 'string' && !allowedValues.includes(item[itemField])) {
+          malformedCollectionItemFields.push(`${field}[${index}].${itemField}`);
+        }
+      }
+    });
+  }
+  if (
+    missingFields.length
+    || malformedFields.length
+    || missing.length
+    || malformedCollectionItems.length
+    || missingCollectionItemFields.length
+    || malformedCollectionItemFields.length
+  ) {
     const details = [];
     if (missingFields.length) details.push(`Missing fields: ${missingFields.join(', ')}`);
     if (malformedFields.length) details.push(`Malformed fields: ${malformedFields.join(', ')}`);
     if (missing.length) details.push(`Missing collections: ${missing.join(', ')}`);
-    if (malformedCollections.length) details.push(`Malformed collection items: ${malformedCollections.join(', ')}`);
+    if (malformedCollectionItems.length) details.push(`Malformed collection items: ${malformedCollectionItems.join(', ')}`);
+    if (missingCollectionItemFields.length) details.push(`Missing collection item fields: ${missingCollectionItemFields.join(', ')}`);
+    if (malformedCollectionItemFields.length) details.push(`Malformed collection item fields: ${malformedCollectionItemFields.join(', ')}`);
     throw new HttpError(400, `Project payload must include complete project data. ${details.join('. ')}.`);
   }
 }

@@ -98,6 +98,8 @@ export function createDefaultProject() {
     timeline: [
       {
         id: createId(),
+        source: '',
+        chapterId: '',
         chapter: '前史',
         event: '林澈的部分童年记忆被改写。',
         consequence: '主角对异常有模糊熟悉感，但无法解释来源。'

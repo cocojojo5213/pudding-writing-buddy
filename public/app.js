@@ -825,7 +825,7 @@ function blankOutline() {
 }
 
 function blankTimeline() {
-  return { id: createId(), chapter: '', event: '', consequence: '' };
+  return { id: createId(), source: '', chapterId: '', chapter: '', event: '', consequence: '' };
 }
 
 function blankResource() {

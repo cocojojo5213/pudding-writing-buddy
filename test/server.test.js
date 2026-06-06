@@ -194,6 +194,20 @@ test('api rejects project saves without a complete project payload', async () =>
     assert.equal(malformedScalarProject.status, 400);
     assert.match(malformedScalarProject.body.error, /Malformed fields: title/);
 
+    const malformedScalarEnum = {
+      ...savedProject.body,
+      language: 'fr'
+    };
+    const malformedScalarEnumProject = await requestJson(app.baseUrl, '/api/project', {
+      method: 'POST',
+      body: JSON.stringify({
+        project: malformedScalarEnum,
+        expectedVersionToken: savedProject.body.versionToken
+      })
+    });
+    assert.equal(malformedScalarEnumProject.status, 400);
+    assert.match(malformedScalarEnumProject.body.error, /Malformed fields: language/);
+
     const malformedCollectionItem = {
       ...savedProject.body,
       characters: ['not an object']
@@ -207,6 +221,54 @@ test('api rejects project saves without a complete project payload', async () =>
     });
     assert.equal(malformedCollectionProject.status, 400);
     assert.match(malformedCollectionProject.body.error, /Malformed collection items: characters\[0\]/);
+
+    const timelineEventWithoutSource = { ...savedProject.body.timeline[0] };
+    delete timelineEventWithoutSource.source;
+    const missingCollectionItemField = {
+      ...savedProject.body,
+      timeline: [timelineEventWithoutSource, ...savedProject.body.timeline.slice(1)]
+    };
+    const missingCollectionItemFieldProject = await requestJson(app.baseUrl, '/api/project', {
+      method: 'POST',
+      body: JSON.stringify({
+        project: missingCollectionItemField,
+        expectedVersionToken: savedProject.body.versionToken
+      })
+    });
+    assert.equal(missingCollectionItemFieldProject.status, 400);
+    assert.match(missingCollectionItemFieldProject.body.error, /Missing collection item fields: timeline\[0\]\.source/);
+
+    const malformedCollectionItemField = {
+      ...savedProject.body,
+      characters: savedProject.body.characters.map((character, index) => (index === 0
+        ? { ...character, name: null }
+        : character))
+    };
+    const malformedCollectionItemFieldProject = await requestJson(app.baseUrl, '/api/project', {
+      method: 'POST',
+      body: JSON.stringify({
+        project: malformedCollectionItemField,
+        expectedVersionToken: savedProject.body.versionToken
+      })
+    });
+    assert.equal(malformedCollectionItemFieldProject.status, 400);
+    assert.match(malformedCollectionItemFieldProject.body.error, /Malformed collection item fields: characters\[0\]\.name/);
+
+    const malformedCollectionEnumField = {
+      ...savedProject.body,
+      hooks: savedProject.body.hooks.map((hook, index) => (index === 0
+        ? { ...hook, status: 'bad' }
+        : hook))
+    };
+    const malformedCollectionEnumFieldProject = await requestJson(app.baseUrl, '/api/project', {
+      method: 'POST',
+      body: JSON.stringify({
+        project: malformedCollectionEnumField,
+        expectedVersionToken: savedProject.body.versionToken
+      })
+    });
+    assert.equal(malformedCollectionEnumFieldProject.status, 400);
+    assert.match(malformedCollectionEnumFieldProject.body.error, /Malformed collection item fields: hooks\[0\]\.status/);
 
     const saved = JSON.parse(await readFile(path.join(app.dataDir, 'project.json'), 'utf8'));
     assert.equal(saved.title, 'Payload Boundary Title');
@@ -441,7 +503,9 @@ test('api settlement uses saved chapter text when client sends only a chapter id
       plan: '已有计划',
       audit: '已有审校',
       summary: '',
-      status: 'draft'
+      status: 'draft',
+      createdAt: '',
+      settledAt: ''
     }];
     const savedProject = await requestJson(app.baseUrl, '/api/project', {
       method: 'POST',
@@ -484,7 +548,9 @@ test('api settlement uses the current disk project as its write base', async () 
       plan: 'current saved plan',
       audit: 'current saved audit',
       summary: '',
-      status: 'revised'
+      status: 'revised',
+      createdAt: '',
+      settledAt: ''
     }];
     const savedProject = await requestJson(app.baseUrl, '/api/project', {
       method: 'POST',
