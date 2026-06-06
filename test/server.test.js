@@ -175,6 +175,27 @@ test('api rejects project saves without a complete project payload', async () =>
   }
 });
 
+test('api rejects non-object explicit project payloads on project-reading routes', async () => {
+  const app = await startApp();
+  try {
+    for (const [pathname, body] of [
+      ['/api/assist', { task: 'brainstorm', project: 'not an object' }],
+      ['/api/export', { project: 'not an object' }],
+      ['/api/snapshot', { project: 'not an object' }],
+      ['/api/settle', { project: 'not an object', chapter: { body: '林澈看见电梯按钮亮起。' } }]
+    ]) {
+      const response = await requestJson(app.baseUrl, pathname, {
+        method: 'POST',
+        body: JSON.stringify(body)
+      });
+      assert.equal(response.status, 400);
+      assert.match(response.body.error, /Project payload must be an object/);
+    }
+  } finally {
+    await app.stop();
+  }
+});
+
 test('static server handles malformed paths, methods, HEAD, and Host safely', async () => {
   const app = await startApp();
   try {

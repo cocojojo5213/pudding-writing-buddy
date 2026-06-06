@@ -120,7 +120,7 @@ async function handleApi(request, response) {
 
   if (request.method === 'POST' && url.pathname === '/api/assist') {
     const body = await readJson(request);
-    const project = normalizeProject(body.project || await loadProject());
+    const project = normalizeProject(await readOptionalProjectPayload(body));
     const payload = body.payload || {};
     const task = String(body.task || 'brainstorm');
     if (!KNOWN_TASKS.has(task)) throw new HttpError(400, `Unknown assist task: ${task}`);
@@ -134,9 +134,10 @@ async function handleApi(request, response) {
 
   if (request.method === 'POST' && url.pathname === '/api/settle') {
     const body = await readJson(request);
-    const result = await settleProjectIfVersion(body.project || await loadProject(), body.chapter || {}, {
-      expectedVersionToken: body.expectedVersionToken ?? body.project?.versionToken,
-      expectedUpdatedAt: body.expectedUpdatedAt || body.project?.updatedAt
+    const explicitProject = readExplicitProjectPayload(body);
+    const result = await settleProjectIfVersion(explicitProject || await loadProject(), body.chapter || {}, {
+      expectedVersionToken: body.expectedVersionToken ?? explicitProject?.versionToken,
+      expectedUpdatedAt: body.expectedUpdatedAt || explicitProject?.updatedAt
     });
     sendJson(response, 200, result);
     return;
@@ -144,7 +145,7 @@ async function handleApi(request, response) {
 
   if (request.method === 'POST' && url.pathname === '/api/export') {
     const body = await readJson(request);
-    const project = normalizeProject(body.project || await loadProject());
+    const project = normalizeProject(await readOptionalProjectPayload(body));
     sendJson(response, 200, {
       filename: safeFilename(project.title || 'novel') + '.md',
       markdown: exportMarkdown(project)
@@ -154,7 +155,7 @@ async function handleApi(request, response) {
 
   if (request.method === 'POST' && url.pathname === '/api/snapshot') {
     const body = await readJson(request);
-    const project = normalizeProject(body.project || await loadProject());
+    const project = normalizeProject(await readOptionalProjectPayload(body));
     const filename = await writeSnapshot(project);
     sendJson(response, 200, { filename });
     return;
@@ -300,10 +301,7 @@ function chapterInputForSettlement(project, chapterInput) {
 function readProjectSavePayload(body) {
   let project;
   if (Object.hasOwn(body, 'project')) {
-    if (!isPlainObject(body.project)) {
-      throw new HttpError(400, 'Project payload must be an object.');
-    }
-    project = body.project;
+    project = readExplicitProjectPayload(body);
   } else if (Object.hasOwn(body, 'expectedVersionToken') || Object.hasOwn(body, 'expectedUpdatedAt')) {
     throw new HttpError(400, 'Project payload is required when sending version metadata.');
   } else {
@@ -311,6 +309,18 @@ function readProjectSavePayload(body) {
   }
   assertCompleteProjectPayload(project);
   return project;
+}
+
+async function readOptionalProjectPayload(body) {
+  return readExplicitProjectPayload(body) || await loadProject();
+}
+
+function readExplicitProjectPayload(body) {
+  if (!Object.hasOwn(body, 'project')) return null;
+  if (!isPlainObject(body.project)) {
+    throw new HttpError(400, 'Project payload must be an object.');
+  }
+  return body.project;
 }
 
 function assertCompleteProjectPayload(project) {
