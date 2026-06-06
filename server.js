@@ -232,9 +232,9 @@ async function saveProjectIfVersion(project, expectedVersion) {
 
 async function settleProjectIfVersion(projectInput, chapter, expectedVersion) {
   return await withProjectWriteLock(async () => {
-    await assertProjectVersion(expectedVersion);
-    const project = normalizeProject(projectInput);
-    const result = applySettlement(project, chapter);
+    const currentProject = await assertProjectVersion(expectedVersion);
+    const project = currentProject || normalizeProject(projectInput);
+    const result = applySettlement(project, chapterInputForSettlement(project, chapter));
     result.project = await saveProjectUnlocked(result.project);
     return result;
   });
@@ -263,7 +263,7 @@ async function withProjectWriteLock(operation) {
 async function assertProjectVersion({ expectedVersionToken, expectedUpdatedAt } = {}) {
   const hasExpectedToken = expectedVersionToken !== undefined && expectedVersionToken !== null;
   const current = await readProjectIfPresent();
-  if (!current) return;
+  if (!current) return null;
   if (!hasExpectedToken && !expectedUpdatedAt) {
     throw new HttpError(409, 'Project version is required before writing. Reload before saving to avoid overwriting newer work.');
   }
@@ -273,6 +273,27 @@ async function assertProjectVersion({ expectedVersionToken, expectedUpdatedAt } 
   if (!hasExpectedToken && current.updatedAt !== expectedUpdatedAt) {
     throw new HttpError(409, 'Project changed on disk. Reload before saving to avoid overwriting newer work.');
   }
+  return current;
+}
+
+function chapterInputForSettlement(project, chapterInput) {
+  const incoming = isPlainObject(chapterInput) ? chapterInput : {};
+  const chapterId = toTrimmedString(incoming.id);
+  if (!chapterId) return chapterInput;
+  const savedChapter = project.chapters.find((chapter) => chapter.id === chapterId);
+  if (!savedChapter) return chapterInput;
+  return {
+    ...incoming,
+    id: savedChapter.id,
+    title: firstNonBlankText(savedChapter.title, incoming.title),
+    body: firstNonBlankText(savedChapter.body, incoming.body, incoming.text),
+    plan: firstNonBlankText(savedChapter.plan, incoming.plan),
+    audit: firstNonBlankText(savedChapter.audit, incoming.audit),
+    summary: firstNonBlankText(savedChapter.summary, incoming.summary),
+    status: firstNonBlankText(savedChapter.status, incoming.status, 'draft'),
+    createdAt: firstNonBlankText(savedChapter.createdAt, incoming.createdAt),
+    settledAt: firstNonBlankText(savedChapter.settledAt, incoming.settledAt)
+  };
 }
 
 async function readProjectIfPresent() {
@@ -457,6 +478,18 @@ function buildModelEndpoint(baseUrlValue) {
 
 function toTrimmedString(value) {
   return typeof value === 'string' ? value.trim() : String(value ?? '').trim();
+}
+
+function firstNonBlankText(...values) {
+  for (const value of values) {
+    const text = typeof value === 'string' ? value : String(value ?? '');
+    if (text.trim()) return text;
+  }
+  return '';
+}
+
+function isPlainObject(value) {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
 function boundedNumber(value, { defaultValue, min, max }) {

@@ -248,6 +248,72 @@ test('api settlement uses saved chapter text when client sends only a chapter id
   }
 });
 
+test('api settlement uses the current disk project as its write base', async () => {
+  const app = await startApp();
+  try {
+    const project = (await requestJson(app.baseUrl, '/api/project')).body;
+    project.title = 'Current Disk Title';
+    project.notes = 'current disk notes';
+    project.chapters = [{
+      id: 'settle-disk-base',
+      title: '第1章 当前磁盘正文',
+      body: '林澈把未来日期的医院缴费单放进口袋。许闻说：“别让它离开你。”',
+      plan: 'current saved plan',
+      audit: 'current saved audit',
+      summary: '',
+      status: 'revised'
+    }];
+    const savedProject = await requestJson(app.baseUrl, '/api/project', {
+      method: 'POST',
+      body: JSON.stringify({
+        project,
+        expectedVersionToken: project.versionToken
+      })
+    });
+    assert.equal(savedProject.status, 200);
+
+    const staleProject = JSON.parse(JSON.stringify(savedProject.body));
+    staleProject.title = 'Stale Client Title';
+    staleProject.notes = 'stale client notes';
+    staleProject.chapters[0] = {
+      ...staleProject.chapters[0],
+      title: '旧客户端章节标题',
+      body: '旧客户端正文不应覆盖当前磁盘正文。',
+      plan: 'stale client plan',
+      audit: 'stale client audit',
+      summary: 'stale client summary',
+      status: 'draft'
+    };
+
+    const settled = await requestJson(app.baseUrl, '/api/settle', {
+      method: 'POST',
+      body: JSON.stringify({
+        project: staleProject,
+        expectedVersionToken: savedProject.body.versionToken,
+        chapter: staleProject.chapters[0]
+      })
+    });
+
+    assert.equal(settled.status, 200);
+    assert.equal(settled.body.project.title, 'Current Disk Title');
+    assert.equal(settled.body.project.notes, 'current disk notes');
+    assert.equal(settled.body.project.chapters[0].title, '第1章 当前磁盘正文');
+    assert.equal(settled.body.project.chapters[0].body, project.chapters[0].body);
+    assert.equal(settled.body.project.chapters[0].plan, 'current saved plan');
+    assert.equal(settled.body.project.chapters[0].audit, 'current saved audit');
+    assert.equal(settled.body.project.chapters[0].status, 'revised');
+    assert.match(settled.body.project.chapters[0].summary, /医院缴费单/);
+    assert.doesNotMatch(settled.body.project.chapters[0].summary, /stale client/);
+
+    const saved = JSON.parse(await readFile(path.join(app.dataDir, 'project.json'), 'utf8'));
+    assert.equal(saved.title, 'Current Disk Title');
+    assert.equal(saved.notes, 'current disk notes');
+    assert.equal(saved.chapters[0].plan, 'current saved plan');
+  } finally {
+    await app.stop();
+  }
+});
+
 test('api backs up corrupt project files before resetting to defaults', async () => {
   const dataDir = await mkdtemp(path.join(tmpdir(), 'novel-copilot-data-'));
   await writeFile(path.join(dataDir, 'project.json'), '{"broken"', 'utf8');
