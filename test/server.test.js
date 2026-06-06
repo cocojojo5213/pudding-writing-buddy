@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { lookup as lookupDns } from 'node:dns/promises';
 import { createServer, request as httpRequest } from 'node:http';
-import { mkdtemp, readFile, readdir, stat, utimes, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, readdir, stat, unlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -476,6 +476,24 @@ test('static server handles malformed paths, methods, HEAD, and Host safely', as
     assert.equal(badHost.status, 200);
     assert.match(badHost.text, /写作助手布丁/);
   } finally {
+    await app.stop();
+  }
+});
+
+test('static server returns a clean 404 when a file cannot be read', async () => {
+  const app = await startApp();
+  const unreadableFilename = `unreadable-${process.pid}-${Date.now()}.txt`;
+  const unreadablePath = path.join(APP_ROOT, 'public', unreadableFilename);
+  try {
+    await writeFile(unreadablePath, 'not readable', 'utf8');
+    await chmod(unreadablePath, 0o000);
+    const unreadable = await rawRequest(app.baseUrl, `/${unreadableFilename}`, { method: 'GET' });
+    assert.equal(unreadable.status, 404);
+    assert.match(unreadable.headers['content-type'], /text\/plain/);
+    assert.equal(unreadable.text, 'Not found');
+  } finally {
+    await chmod(unreadablePath, 0o600).catch(() => {});
+    await unlink(unreadablePath).catch(() => {});
     await app.stop();
   }
 });

@@ -238,12 +238,14 @@ async function serveStatic(request, response) {
     const fileStat = await stat(resolved);
     if (!fileStat.isFile()) throw new Error('Not a file');
     const ext = path.extname(resolved);
-    response.writeHead(200, { 'Content-Type': MIME_TYPES[ext] || 'application/octet-stream' });
     if (method === 'HEAD') {
+      response.writeHead(200, { 'Content-Type': MIME_TYPES[ext] || 'application/octet-stream' });
       response.end();
       return;
     }
-    response.end(await readFile(resolved));
+    const content = await readFile(resolved);
+    response.writeHead(200, { 'Content-Type': MIME_TYPES[ext] || 'application/octet-stream' });
+    response.end(content);
   } catch {
     sendPlainText(response, 404, 'Not found', method);
   }
