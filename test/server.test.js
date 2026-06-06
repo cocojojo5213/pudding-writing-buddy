@@ -859,7 +859,13 @@ test('api export returns sanitized markdown filenames', async () => {
 });
 
 test('api reports non-json successful model responses clearly', async () => {
-  const model = await startMockModel((_request, response) => {
+  const model = await startMockModel(async (request, response) => {
+    const body = await readRequestJson(request).catch(() => ({}));
+    if (body.model === 'null-json') {
+      response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      response.end('null');
+      return;
+    }
     response.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
     response.end('plain text, not json');
   });
@@ -878,6 +884,20 @@ test('api reports non-json successful model responses clearly', async () => {
     });
     assert.equal(response.status, 500);
     assert.match(response.body.error, /not valid JSON/);
+
+    const nullJsonResponse = await requestJson(app.baseUrl, '/api/assist', {
+      method: 'POST',
+      body: JSON.stringify({
+        task: 'plan',
+        modelConfig: {
+          baseUrl: model.baseUrl,
+          apiKey: 'test-key',
+          model: 'null-json'
+        }
+      })
+    });
+    assert.equal(nullJsonResponse.status, 500);
+    assert.match(nullJsonResponse.body.error, /Model returned no text content/);
   } finally {
     await app.stop();
     await model.stop();
@@ -900,6 +920,10 @@ test('api surfaces model error messages from failed JSON responses', async () =>
       response.end(JSON.stringify(false));
       return;
     }
+    if (body.model === 'null-error') {
+      response.end('null');
+      return;
+    }
     response.end(JSON.stringify([
       'outer error',
       { error: { message: 'nested message' } },
@@ -912,6 +936,7 @@ test('api surfaces model error messages from failed JSON responses', async () =>
       ['string-error', /bad api key/],
       ['number-error', /429/],
       ['boolean-error', /false/],
+      ['null-error', /Unauthorized|HTTP 401/],
       ['array-error', /outer error.*nested message.*42/s]
     ]) {
       const response = await requestJson(app.baseUrl, '/api/assist', {

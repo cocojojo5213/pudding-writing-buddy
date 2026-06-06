@@ -908,6 +908,7 @@ function boundedInteger(value, bounds) {
 }
 
 function extractModelText(json) {
+  if (!json || typeof json !== 'object') return '';
   if (typeof json.output_text === 'string') return json.output_text;
   if (typeof json.text === 'string') return json.text;
   if (typeof json.choices?.[0]?.text === 'string') return json.choices[0].text;
@@ -955,6 +956,7 @@ function modelErrorDetail(json, statusText, status) {
     const detail = json.map((item) => modelErrorDetail(item, '', status)).filter(Boolean).join('; ');
     if (detail) return detail;
   }
+  if (!json || typeof json !== 'object') return statusText || `HTTP ${status}`;
   if (typeof json.error?.message === 'string' && json.error.message.trim()) return json.error.message;
   if (typeof json.error === 'string' && json.error.trim()) return json.error;
   if (typeof json.message === 'string' && json.message.trim()) return json.message;
