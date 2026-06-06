@@ -613,7 +613,7 @@ function scheduleSave() {
   cancelPendingSave();
   state.saveTimer = setTimeout(() => {
     state.saveTimer = null;
-    saveProject().catch((error) => showActionError(error, 'Save error'));
+    saveProject().catch(showBackgroundSaveError);
   }, 700);
 }
 
@@ -739,6 +739,11 @@ function showActionError(error, label = 'Error') {
     ? `${error.message}\n\n当前浏览器里的项目版本已经落后。请先刷新页面或打开 Export 复制本地未保存内容，再决定如何合并。`
     : error instanceof Error ? error.message : String(error);
   showView('export');
+  console.error(error);
+}
+
+function showBackgroundSaveError(error) {
+  setSaveState(error?.status === 409 ? 'Conflict' : 'Save error', 'warn');
   console.error(error);
 }
 

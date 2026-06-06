@@ -158,6 +158,63 @@ test('markdown export cancels pending autosave so rescue output is not overwritt
   }
 });
 
+test('in-flight autosave failures do not overwrite rescue export output', async () => {
+  const dom = createDomHarness();
+  const originalConsoleError = console.error;
+  const project = createDefaultProject();
+  let saveAttempts = 0;
+  let releaseAutosave;
+
+  try {
+    console.error = () => {};
+    globalThis.document = dom.document;
+    globalThis.window = dom.window;
+    globalThis.localStorage = createStorage();
+    globalThis.URL = {
+      createObjectURL() {
+        return 'blob:pudding-inflight-rescue-export';
+      },
+      revokeObjectURL() {}
+    };
+    globalThis.fetch = async (requestPath, options = {}) => {
+      if (requestPath === '/api/project' && options.method === 'POST') {
+        saveAttempts += 1;
+        return await new Promise((resolve) => {
+          releaseAutosave = () => resolve(jsonResponse({ error: 'In-flight autosave failed after export' }, 500));
+        });
+      }
+      if (requestPath === '/api/project') return jsonResponse(project);
+      if (requestPath === '/api/export' && options.method === 'POST') {
+        const payload = JSON.parse(options.body);
+        assert.equal(payload.project.title, 'In Flight Rescue Title');
+        return jsonResponse({
+          filename: 'In-Flight-Rescue.md',
+          markdown: '# In Flight Rescue\n\n导出结果不应被旧自动保存错误覆盖。'
+        });
+      }
+      throw new Error(`Unexpected fetch: ${requestPath}`);
+    };
+
+    const moduleUrl = pathToFileURL(path.join(APP_ROOT, 'public/app.js'));
+    await import(`${moduleUrl.href}?frontend-test=${Date.now()}`);
+    await waitFor(() => dom.byId('save-state').textContent === 'Ready');
+
+    dom.byId('title').value = 'In Flight Rescue Title';
+    dom.byId('title').dispatchEvent({ type: 'input' });
+    await waitFor(() => saveAttempts === 1 && releaseAutosave, 2000);
+
+    dom.byId('export-md').click();
+    await waitFor(() => dom.byId('output').value.includes('In Flight Rescue'));
+    releaseAutosave();
+    await waitFor(() => dom.byId('save-state').textContent === 'Save error');
+
+    assert.equal(saveAttempts, 1);
+    assert.equal(dom.byId('output').value, '# In Flight Rescue\n\n导出结果不应被旧自动保存错误覆盖。');
+  } finally {
+    console.error = originalConsoleError;
+  }
+});
+
 test('snapshot cancels pending autosave so rescue status is not overwritten', async () => {
   const dom = createDomHarness();
   const originalConsoleError = console.error;
