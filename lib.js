@@ -2,6 +2,9 @@ import crypto from 'node:crypto';
 
 export const PROJECT_SCHEMA_VERSION = 2;
 
+export const MIN_TARGET_WORDS = 300;
+export const MAX_TARGET_WORDS = 20_000;
+
 export const VALID_HOOK_STATUSES = ['open', 'progressing', 'deferred', 'resolved'];
 
 export const KNOWN_TASKS = new Set([
@@ -148,7 +151,7 @@ export function normalizeProject(input = {}) {
   merged.genre = asString(merged.genre, base.genre);
   merged.logline = asString(merged.logline, base.logline);
   merged.protagonist = asString(merged.protagonist, base.protagonist);
-  merged.targetWords = clampNumber(merged.targetWords, 300, 20000, base.targetWords);
+  merged.targetWords = clampNumber(merged.targetWords, MIN_TARGET_WORDS, MAX_TARGET_WORDS, base.targetWords);
   merged.language = merged.language === 'en' ? 'en' : 'zh';
   merged.authorIntent = asString(merged.authorIntent, base.authorIntent);
   merged.currentFocus = asString(merged.currentFocus, base.currentFocus);

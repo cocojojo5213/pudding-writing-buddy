@@ -7,6 +7,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   KNOWN_TASKS,
+  MAX_TARGET_WORDS,
+  MIN_TARGET_WORDS,
   VALID_HOOK_STATUSES,
   applySettlement,
   buildPrompt,
@@ -396,7 +398,7 @@ function readModelConfigPayload(body) {
 function assertCompleteProjectPayload(project) {
   const missingFields = PROJECT_SCALAR_FIELDS.filter((field) => !Object.hasOwn(project, field));
   const malformedFields = PROJECT_TEXT_FIELDS.filter((field) => Object.hasOwn(project, field) && typeof project[field] !== 'string');
-  if (Object.hasOwn(project, 'targetWords') && !isFiniteNumberValue(project.targetWords)) malformedFields.push('targetWords');
+  if (Object.hasOwn(project, 'targetWords') && !isTargetWordsValue(project.targetWords)) malformedFields.push('targetWords');
   for (const [field, allowedValues] of Object.entries(PROJECT_ENUM_FIELDS)) {
     if (Object.hasOwn(project, field) && typeof project[field] === 'string' && !allowedValues.includes(project[field])) {
       malformedFields.push(field);
@@ -464,11 +466,12 @@ function assertCompleteProjectPayload(project) {
   }
 }
 
-function isFiniteNumberValue(value) {
+function isTargetWordsValue(value) {
   if (typeof value !== 'number' && typeof value !== 'string') return false;
   const text = String(value).trim();
   if (!text) return false;
-  return Number.isFinite(Number(text));
+  const number = Number(text);
+  return Number.isFinite(number) && number >= MIN_TARGET_WORDS && number <= MAX_TARGET_WORDS;
 }
 
 function hasControlCharacters(value) {

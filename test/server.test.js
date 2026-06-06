@@ -219,6 +219,22 @@ test('api rejects project saves without a complete project payload', async () =>
     assert.equal(malformedScalarProject.status, 400);
     assert.match(malformedScalarProject.body.error, /Malformed fields: title/);
 
+    for (const targetWords of [299, 20_001]) {
+      const malformedTargetWords = {
+        ...savedProject.body,
+        targetWords
+      };
+      const malformedTargetWordsProject = await requestJson(app.baseUrl, '/api/project', {
+        method: 'POST',
+        body: JSON.stringify({
+          project: malformedTargetWords,
+          expectedVersionToken: savedProject.body.versionToken
+        })
+      });
+      assert.equal(malformedTargetWordsProject.status, 400);
+      assert.match(malformedTargetWordsProject.body.error, /Malformed fields: targetWords/);
+    }
+
     const malformedScalarEnum = {
       ...savedProject.body,
       language: 'fr'
