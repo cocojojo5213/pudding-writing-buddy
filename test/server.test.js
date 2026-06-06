@@ -271,6 +271,38 @@ test('api rejects project saves without a complete project payload', async () =>
     assert.equal(malformedCollectionEnumFieldProject.status, 400);
     assert.match(malformedCollectionEnumFieldProject.body.error, /Malformed collection item fields: hooks\[0\]\.status/);
 
+    const blankCollectionId = {
+      ...savedProject.body,
+      characters: savedProject.body.characters.map((character, index) => (index === 0
+        ? { ...character, id: '   ' }
+        : character))
+    };
+    const blankCollectionIdProject = await requestJson(app.baseUrl, '/api/project', {
+      method: 'POST',
+      body: JSON.stringify({
+        project: blankCollectionId,
+        expectedVersionToken: savedProject.body.versionToken
+      })
+    });
+    assert.equal(blankCollectionIdProject.status, 400);
+    assert.match(blankCollectionIdProject.body.error, /Malformed collection item fields: characters\[0\]\.id/);
+
+    const duplicateCollectionIds = {
+      ...savedProject.body,
+      characters: savedProject.body.characters.map((character, index) => (index === 1
+        ? { ...character, id: savedProject.body.characters[0].id }
+        : character))
+    };
+    const duplicateCollectionIdsProject = await requestJson(app.baseUrl, '/api/project', {
+      method: 'POST',
+      body: JSON.stringify({
+        project: duplicateCollectionIds,
+        expectedVersionToken: savedProject.body.versionToken
+      })
+    });
+    assert.equal(duplicateCollectionIdsProject.status, 400);
+    assert.match(duplicateCollectionIdsProject.body.error, /Duplicate collection item ids: characters\[1\]\.id/);
+
     const saved = JSON.parse(await readFile(path.join(app.dataDir, 'project.json'), 'utf8'));
     assert.equal(saved.title, 'Payload Boundary Title');
     assert.equal(saved.versionToken, savedProject.body.versionToken);

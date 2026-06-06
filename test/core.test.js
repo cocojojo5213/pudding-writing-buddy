@@ -61,6 +61,28 @@ test('normalization gives legacy items stable ids without inventing timestamps',
   assert.equal(explicit.chapters[0].id, 'kept-id');
 });
 
+test('normalization repairs duplicate legacy collection ids stably', () => {
+  const legacy = {
+    characters: [
+      { id: 'duplicate-id', name: '阿宁', role: '调查员' },
+      { id: 'duplicate-id', name: '许闻', role: '引路人' }
+    ],
+    chapters: [
+      { id: 'same-chapter', title: '第一章', body: '第一章正文。' },
+      { id: 'same-chapter', title: '第二章', body: '第二章正文。' }
+    ]
+  };
+
+  const first = normalizeProject(legacy);
+  const second = normalizeProject(legacy);
+
+  assert.equal(first.characters[0].id, 'duplicate-id');
+  assert.notEqual(first.characters[1].id, 'duplicate-id');
+  assert.notEqual(first.chapters[1].id, 'same-chapter');
+  assert.deepEqual(first.characters.map((item) => item.id), second.characters.map((item) => item.id));
+  assert.deepEqual(first.chapters.map((item) => item.id), second.chapters.map((item) => item.id));
+});
+
 test('normalization migrates legacy chapter text without reviving cleared bodies', () => {
   const legacyTextOnly = normalizeProject({
     chapters: [{

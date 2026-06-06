@@ -820,12 +820,17 @@ function formatAudit(metrics, findings) {
 }
 
 function normalizeList(value, normalizer, idPrefix) {
-  return Array.isArray(value)
-    ? value.map((item, index) => {
-      const plain = isPlainObject(item) ? item : {};
-      return normalizer(plain, deterministicId(idPrefix, plain, index));
-    })
-    : [];
+  if (!Array.isArray(value)) return [];
+  const usedIds = new Set();
+  return value.map((item, index) => {
+    const plain = isPlainObject(item) ? item : {};
+    const normalized = normalizer(plain, deterministicId(idPrefix, plain, index));
+    if (!normalized.id || usedIds.has(normalized.id)) {
+      normalized.id = uniqueDeterministicId(idPrefix, plain, index, usedIds);
+    }
+    usedIds.add(normalized.id);
+    return normalized;
+  });
 }
 
 function normalizeCharacter(item = {}, fallbackId = deterministicId('character', item, 0)) {
@@ -1139,6 +1144,20 @@ function deterministicId(prefix, item, index) {
     .digest('hex')
     .slice(0, 12);
   return `${prefix}-${hash}`;
+}
+
+function uniqueDeterministicId(prefix, item, index, usedIds) {
+  const first = deterministicId(prefix, item, index);
+  if (!usedIds.has(first)) return first;
+  for (let attempt = 1; ; attempt += 1) {
+    const hash = crypto
+      .createHash('sha256')
+      .update(`${prefix}:duplicate:${index}:${attempt}:${stableJson(stripId(item))}`)
+      .digest('hex')
+      .slice(0, 12);
+    const id = `${prefix}-${hash}`;
+    if (!usedIds.has(id)) return id;
+  }
 }
 
 function stripId(value) {

@@ -409,10 +409,12 @@ function assertCompleteProjectPayload(project) {
   const malformedCollectionItems = [];
   const missingCollectionItemFields = [];
   const malformedCollectionItemFields = [];
+  const duplicateCollectionItemIds = [];
   for (const field of PROJECT_COLLECTION_FIELDS) {
     if (!Array.isArray(project[field])) continue;
     const itemFields = PROJECT_COLLECTION_ITEM_FIELDS[field] || [];
     const enumFields = PROJECT_COLLECTION_ENUM_FIELDS[field] || {};
+    const seenIds = new Set();
     project[field].forEach((item, index) => {
       if (!isPlainObject(item)) {
         malformedCollectionItems.push(`${field}[${index}]`);
@@ -424,6 +426,17 @@ function assertCompleteProjectPayload(project) {
           missingCollectionItemFields.push(fieldPath);
         } else if (typeof item[itemField] !== 'string') {
           malformedCollectionItemFields.push(fieldPath);
+        }
+      }
+      if (typeof item.id === 'string') {
+        const id = item.id.trim();
+        const idPath = `${field}[${index}].id`;
+        if (!id) {
+          malformedCollectionItemFields.push(idPath);
+        } else if (seenIds.has(id)) {
+          duplicateCollectionItemIds.push(idPath);
+        } else {
+          seenIds.add(id);
         }
       }
       for (const [itemField, allowedValues] of Object.entries(enumFields)) {
@@ -440,6 +453,7 @@ function assertCompleteProjectPayload(project) {
     || malformedCollectionItems.length
     || missingCollectionItemFields.length
     || malformedCollectionItemFields.length
+    || duplicateCollectionItemIds.length
   ) {
     const details = [];
     if (missingFields.length) details.push(`Missing fields: ${missingFields.join(', ')}`);
@@ -448,6 +462,7 @@ function assertCompleteProjectPayload(project) {
     if (malformedCollectionItems.length) details.push(`Malformed collection items: ${malformedCollectionItems.join(', ')}`);
     if (missingCollectionItemFields.length) details.push(`Missing collection item fields: ${missingCollectionItemFields.join(', ')}`);
     if (malformedCollectionItemFields.length) details.push(`Malformed collection item fields: ${malformedCollectionItemFields.join(', ')}`);
+    if (duplicateCollectionItemIds.length) details.push(`Duplicate collection item ids: ${duplicateCollectionItemIds.join(', ')}`);
     throw new HttpError(400, `Project payload must include complete project data. ${details.join('. ')}.`);
   }
 }
