@@ -265,6 +265,12 @@ test('static server handles malformed paths, methods, HEAD, and Host safely', as
     assert.equal(controlCharPath.status, 400);
     assert.equal(controlCharPath.text, 'Bad request');
 
+    for (const pathname of ['/..%2fserver.js', '/%2e%2e%2fserver.js', '/%2f..%2fserver.js']) {
+      const traversal = await rawRequest(app.baseUrl, pathname, { method: 'GET' });
+      assert.equal(traversal.status, 403);
+      assert.equal(traversal.text, 'Forbidden');
+    }
+
     const wrongMethod = await rawRequest(app.baseUrl, '/', { method: 'POST' });
     assert.equal(wrongMethod.status, 405);
     assert.equal(wrongMethod.headers.allow, 'GET, HEAD');
