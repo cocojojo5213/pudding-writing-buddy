@@ -417,6 +417,82 @@ test('add actions cannot mutate the project while a guarded action is running', 
   assert.equal(dom.byId('save-state').textContent, 'Saved');
 });
 
+test('chapter switches cannot retarget generated output while a guarded action is running', async () => {
+  const dom = createDomHarness();
+  let project = {
+    ...createDefaultProject(),
+    chapters: [
+      {
+        id: 'locked-first-chapter',
+        title: '第1章',
+        body: '',
+        plan: '',
+        audit: '',
+        summary: '',
+        status: 'draft',
+        createdAt: '',
+        settledAt: ''
+      },
+      {
+        id: 'locked-second-chapter',
+        title: '第2章',
+        body: '',
+        plan: '',
+        audit: '',
+        summary: '',
+        status: 'draft',
+        createdAt: '',
+        settledAt: ''
+      }
+    ]
+  };
+  const savePayloads = [];
+  let releaseAssist;
+
+  globalThis.document = dom.document;
+  globalThis.window = dom.window;
+  globalThis.localStorage = createStorage();
+  globalThis.fetch = async (requestPath, options = {}) => {
+    if (requestPath === '/api/project' && options.method === 'POST') {
+      const payload = JSON.parse(options.body);
+      savePayloads.push(payload);
+      project = {
+        ...payload.project,
+        versionToken: `chapter-lock-token-${savePayloads.length}`,
+        updatedAt: `2026-06-07T00:00:2${savePayloads.length}.000Z`
+      };
+      return jsonResponse(project);
+    }
+    if (requestPath === '/api/assist' && options.method === 'POST') {
+      const payload = JSON.parse(options.body);
+      assert.equal(payload.task, 'plan');
+      assert.equal(payload.payload.chapterId, 'locked-first-chapter');
+      return await new Promise((resolve) => {
+        releaseAssist = () => resolve(jsonResponse({ output: '# 第1章计划：锁定章节\n\n章节目标：确认生成结果不会落到第2章。' }));
+      });
+    }
+    if (requestPath === '/api/project') return jsonResponse(project);
+    throw new Error(`Unexpected fetch: ${requestPath}`);
+  };
+
+  const moduleUrl = pathToFileURL(path.join(APP_ROOT, 'public/app.js'));
+  await import(`${moduleUrl.href}?frontend-test=${Date.now()}`);
+  await waitFor(() => dom.byId('save-state').textContent === 'Ready');
+  await waitFor(() => dom.chapterButtons().length === 2);
+
+  dom.byId('plan').click();
+  await waitFor(() => Boolean(releaseAssist));
+  assert.equal(dom.chapterButtons()[1].disabled, true);
+
+  dom.chapterButtons()[1].click();
+  releaseAssist();
+
+  await waitFor(() => savePayloads.length === 1 && dom.byId('save-state').textContent === 'Saved');
+  assert.match(savePayloads[0].project.chapters[0].plan, /锁定章节/);
+  assert.equal(savePayloads[0].project.chapters[1].plan, '');
+  assert.equal(dom.byId('chapterTitle').value, '第1章计划：锁定章节');
+});
+
 function jsonResponse(body, status = 200) {
   return {
     ok: status >= 200 && status < 300,
@@ -445,6 +521,7 @@ function createStorage() {
 function createDomHarness(options = {}) {
   const elements = new Map();
   const allElements = [];
+  let chapterButtons = [];
 
   const register = (element) => {
     allElements.push(element);
@@ -509,7 +586,17 @@ function createDomHarness(options = {}) {
   };
 
   for (const [tagName, ids] of Object.entries(idsByTag)) {
-    for (const id of ids) register(new TestElement(tagName, { id }));
+    for (const id of ids) {
+      const element = register(new TestElement(tagName, {
+        id,
+        onInnerHTMLSet: id === 'chapters'
+          ? (html) => {
+            chapterButtons = parseChapterButtons(html);
+          }
+          : null
+      }));
+      elements.set(id, element);
+    }
   }
 
   const tabs = ['brief', 'board', 'state', 'write', 'export'].map((view) => {
@@ -533,9 +620,13 @@ function createDomHarness(options = {}) {
       if (selector === '.tab') return tabs;
       if (selector === '.view') return allElements.filter((element) => element.classList.contains('view'));
       if (selector === 'button, input, textarea, select') {
-        return allElements.filter((element) => ['BUTTON', 'INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName));
+        return [
+          ...allElements.filter((element) => ['BUTTON', 'INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName)),
+          ...chapterButtons
+        ];
       }
-      if (selector.includes('[data-type=') || selector.includes('[data-remove=') || selector === '[data-chapter]') return [];
+      if (selector === '[data-chapter]') return chapterButtons;
+      if (selector.includes('[data-type=') || selector.includes('[data-remove=')) return [];
       return [];
     },
     createElement(tagName) {
@@ -552,12 +643,15 @@ function createDomHarness(options = {}) {
     },
     byId(id) {
       return elements.get(id);
+    },
+    chapterButtons() {
+      return chapterButtons;
     }
   };
 }
 
 class TestElement {
-  constructor(tagName, { id = '', classes = [], dataset = {} } = {}) {
+  constructor(tagName, { id = '', classes = [], dataset = {}, onInnerHTMLSet = null } = {}) {
     this.tagName = tagName;
     this.id = id;
     this.dataset = { ...dataset };
@@ -565,13 +659,23 @@ class TestElement {
     this.listeners = new Map();
     this.value = '';
     this.textContent = '';
-    this.innerHTML = '';
+    this._innerHTML = '';
+    this.onInnerHTMLSet = onInnerHTMLSet;
     this.className = '';
     this.disabled = false;
     this.children = [];
     this.parentNode = null;
     this.style = {};
     this.clickHook = null;
+  }
+
+  get innerHTML() {
+    return this._innerHTML;
+  }
+
+  set innerHTML(value) {
+    this._innerHTML = String(value);
+    this.onInnerHTMLSet?.(this._innerHTML);
   }
 
   addEventListener(type, handler) {
@@ -606,6 +710,28 @@ class TestElement {
   get isConnected() {
     return this.tagName === 'BODY' || Boolean(this.parentNode?.isConnected);
   }
+}
+
+function parseChapterButtons(html) {
+  const buttons = [];
+  const regex = /<button\b[^>]*data-chapter="([^"]*)"[^>]*>/g;
+  let match;
+  while ((match = regex.exec(html))) {
+    buttons.push(new TestElement('BUTTON', {
+      classes: ['chapter-item'],
+      dataset: { chapter: decodeHtmlAttribute(match[1]) }
+    }));
+  }
+  return buttons;
+}
+
+function decodeHtmlAttribute(value) {
+  return String(value)
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
 }
 
 class TestClassList {

@@ -270,13 +270,15 @@ function renderChapters() {
   `).join('') : '<p class="status-warn">No chapters yet.</p>';
 
   $$('[data-chapter]').forEach((button) => {
-    button.addEventListener('click', () => {
-      state.selectedChapterId = button.dataset.chapter;
-      renderChapters();
-      renderEditor();
-      renderMetrics();
-    });
+    button.addEventListener('click', () => guardAction(() => selectChapter(button.dataset.chapter)));
   });
+}
+
+function selectChapter(chapterId) {
+  state.selectedChapterId = chapterId;
+  renderChapters();
+  renderEditor();
+  renderMetrics();
 }
 
 function renderEditor() {
