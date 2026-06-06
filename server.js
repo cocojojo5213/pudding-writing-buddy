@@ -13,10 +13,11 @@ import {
   normalizeProject,
   offlineAssist
 } from './lib.js';
+import { parseIntegerSetting } from './server-config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const PORT = Number(process.env.PORT || 5179);
+const PORT = parseIntegerSetting(process.env.PORT, { defaultValue: 5179, min: 1, max: 65535 });
 const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, 'data');
 const SNAPSHOT_DIR = path.join(DATA_DIR, 'snapshots');
 const PROJECT_FILE = path.join(DATA_DIR, 'project.json');
@@ -30,7 +31,7 @@ const MAX_MODEL_TEMPERATURE = 2;
 const DEFAULT_MODEL_MAX_TOKENS = 3500;
 const MIN_MODEL_MAX_TOKENS = 500;
 const MAX_MODEL_MAX_TOKENS = 20_000;
-const STALE_TEMP_MS = Number(process.env.STALE_TEMP_MS || 24 * 60 * 60 * 1000);
+const STALE_TEMP_MS = parseIntegerSetting(process.env.STALE_TEMP_MS, { defaultValue: 24 * 60 * 60 * 1000, min: 1000 });
 const PROJECT_COLLECTION_FIELDS = ['characters', 'hooks', 'outline', 'timeline', 'resources', 'arcs', 'chapters'];
 let projectWriteQueue = Promise.resolve();
 
