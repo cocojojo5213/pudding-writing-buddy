@@ -1,0 +1,17 @@
+node_modules/
+npm-debug.log*
+
+# Local manuscript state and generated backups are private by default.
+data/
+
+# Local browser/render verification artifacts.
+render-check*.png
+
+# Environment/config files that may contain credentials.
+.env
+.env.*
+!.env.example
+
+# OS/editor noise.
+.DS_Store
+*.swp

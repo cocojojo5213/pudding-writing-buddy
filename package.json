@@ -1,0 +1,22 @@
+{
+  "name": "pudding-writing-buddy",
+  "version": "0.1.0",
+  "description": "Local-first novel writing workbench with project memory, chapter planning, drafting, auditing, revision, and export.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": [
+    "ai-writing",
+    "novel",
+    "writing-assistant",
+    "openai-compatible",
+    "local-first"
+  ],
+  "license": "MIT"
+}

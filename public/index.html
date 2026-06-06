@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>写作助手布丁</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">NC</div>
+          <div>
+            <h1>写作助手布丁</h1>
+            <p id="save-state">Loading</p>
+          </div>
+        </div>
+
+        <section class="panel">
+          <div class="panel-title">
+            <h2>Project</h2>
+            <button id="save-project" type="button">Save</button>
+          </div>
+          <label>Title<input id="title" type="text"></label>
+          <label>Genre<input id="genre" type="text"></label>
+          <label>Protagonist<input id="protagonist" type="text"></label>
+          <label>Target<input id="targetWords" type="number" min="300" step="100"></label>
+          <label>Language
+            <select id="language">
+              <option value="zh">Chinese</option>
+              <option value="en">English</option>
+            </select>
+          </label>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <h2>Metrics</h2>
+            <button id="refresh-metrics" type="button">Refresh</button>
+          </div>
+          <div id="metrics" class="metric-grid"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <h2>Model</h2>
+            <button id="save-model" type="button">Save</button>
+          </div>
+          <label>Base URL<input id="baseUrl" type="text" placeholder="https://api.openai.com/v1"></label>
+          <label>Model<input id="model" type="text" placeholder="gpt-4.1-mini"></label>
+          <label>API Key<input id="apiKey" type="password" autocomplete="off"></label>
+          <div class="split">
+            <label>Temp<input id="temperature" type="number" min="0" max="2" step="0.1"></label>
+            <label>Tokens<input id="maxTokens" type="number" min="500" step="500"></label>
+          </div>
+        </section>
+      </aside>
+
+      <main class="workspace">
+        <nav class="tabs" aria-label="Workspace tabs">
+          <button class="tab active" data-view="brief" type="button">Brief</button>
+          <button class="tab" data-view="board" type="button">Board</button>
+          <button class="tab" data-view="state" type="button">State</button>
+          <button class="tab" data-view="write" type="button">Write</button>
+          <button class="tab" data-view="export" type="button">Export</button>
+        </nav>
+
+        <section id="brief-view" class="view active">
+          <div class="grid two">
+            <section class="panel fill">
+              <div class="panel-title"><h2>Story</h2></div>
+              <label>Logline<textarea id="logline"></textarea></label>
+              <label>Author Intent<textarea id="authorIntent"></textarea></label>
+              <label>Current Focus<textarea id="currentFocus"></textarea></label>
+            </section>
+            <section class="panel fill">
+              <div class="panel-title"><h2>Bible</h2></div>
+              <label>World Rules<textarea id="storyBible"></textarea></label>
+              <label>Book Rules<textarea id="bookRules"></textarea></label>
+              <label>Banned Patterns<textarea id="bannedPatterns"></textarea></label>
+              <label>Notes<textarea id="notes"></textarea></label>
+              <label>Style Profile<textarea id="styleProfile"></textarea></label>
+            </section>
+          </div>
+        </section>
+
+        <section id="board-view" class="view">
+          <div class="grid three">
+            <section class="panel fill">
+              <div class="panel-title">
+                <h2>Characters</h2>
+                <button id="add-character" type="button">Add</button>
+              </div>
+              <div id="characters" class="stack"></div>
+            </section>
+            <section class="panel fill">
+              <div class="panel-title">
+                <h2>Hooks</h2>
+                <button id="add-hook" type="button">Add</button>
+              </div>
+              <div id="hooks" class="stack"></div>
+            </section>
+            <section class="panel fill">
+              <div class="panel-title">
+                <h2>Outline</h2>
+                <button id="add-outline" type="button">Add</button>
+              </div>
+              <div id="outline" class="stack"></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="state-view" class="view">
+          <div class="grid three">
+            <section class="panel fill">
+              <div class="panel-title">
+                <h2>Timeline</h2>
+                <button id="add-timeline" type="button">Add</button>
+              </div>
+              <div id="timeline" class="stack"></div>
+            </section>
+            <section class="panel fill">
+              <div class="panel-title">
+                <h2>Resources</h2>
+                <button id="add-resource" type="button">Add</button>
+              </div>
+              <div id="resources" class="stack"></div>
+            </section>
+            <section class="panel fill">
+              <div class="panel-title">
+                <h2>Arcs</h2>
+                <button id="add-arc" type="button">Add</button>
+              </div>
+              <div id="arcs" class="stack"></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="write-view" class="view">
+          <div class="writing-grid">
+            <section class="panel chapter-list">
+              <div class="panel-title">
+                <h2>Chapters</h2>
+                <button id="add-chapter" type="button">Add</button>
+              </div>
+              <div id="chapters" class="chapter-items"></div>
+            </section>
+
+            <section class="panel editor">
+              <div class="panel-title editor-title">
+                <input id="chapterTitle" type="text" placeholder="Chapter title">
+                <div class="actions">
+                  <button id="plan" type="button">Plan</button>
+                  <button id="context" type="button">Context</button>
+                  <button id="draft" type="button">Draft</button>
+                  <button id="audit" type="button">Audit</button>
+                  <button id="revise" type="button">Revise</button>
+                  <button id="style" type="button">Style</button>
+                  <button id="settle" type="button">Settle</button>
+                </div>
+              </div>
+              <div id="chapter-metrics" class="metric-grid wide"></div>
+              <div class="editor-columns">
+                <label>Plan<textarea id="chapterPlan"></textarea></label>
+                <label>Draft<textarea id="chapterBody"></textarea></label>
+                <label>Audit<textarea id="chapterAudit"></textarea></label>
+              </div>
+              <label>Summary<input id="chapterSummary" type="text"></label>
+            </section>
+          </div>
+        </section>
+
+        <section id="export-view" class="view">
+          <section class="panel fill">
+            <div class="panel-title">
+              <h2>Package</h2>
+              <div class="actions">
+                <button id="brainstorm" type="button">Ideas</button>
+                <button id="snapshot" type="button">Snapshot</button>
+                <button id="export-md" type="button">Markdown</button>
+                <button id="reset-project" type="button">Reset</button>
+              </div>
+            </div>
+            <textarea id="output" class="output" spellcheck="false"></textarea>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
