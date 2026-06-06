@@ -238,14 +238,9 @@ async function serveStatic(request, response) {
     const fileStat = await stat(resolved);
     if (!fileStat.isFile()) throw new Error('Not a file');
     const ext = path.extname(resolved);
-    if (method === 'HEAD') {
-      response.writeHead(200, { 'Content-Type': MIME_TYPES[ext] || 'application/octet-stream' });
-      response.end();
-      return;
-    }
     const content = await readFile(resolved);
     response.writeHead(200, { 'Content-Type': MIME_TYPES[ext] || 'application/octet-stream' });
-    response.end(content);
+    response.end(method === 'HEAD' ? undefined : content);
   } catch {
     sendPlainText(response, 404, 'Not found', method);
   }

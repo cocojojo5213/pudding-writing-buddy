@@ -487,6 +487,11 @@ test('static server returns a clean 404 when a file cannot be read', async () =>
   try {
     await writeFile(unreadablePath, 'not readable', 'utf8');
     await chmod(unreadablePath, 0o000);
+    const unreadableHead = await rawRequest(app.baseUrl, `/${unreadableFilename}`, { method: 'HEAD' });
+    assert.equal(unreadableHead.status, 404);
+    assert.match(unreadableHead.headers['content-type'], /text\/plain/);
+    assert.equal(unreadableHead.text, '');
+
     const unreadable = await rawRequest(app.baseUrl, `/${unreadableFilename}`, { method: 'GET' });
     assert.equal(unreadable.status, 404);
     assert.match(unreadable.headers['content-type'], /text\/plain/);
