@@ -61,6 +61,24 @@ test('normalization gives legacy items stable ids without inventing timestamps',
   assert.equal(explicit.chapters[0].id, 'kept-id');
 });
 
+test('normalization does not leak default story details into matching user entries', () => {
+  const project = normalizeProject({
+    characters: [{ name: '林澈' }],
+    hooks: [{ text: '妹妹书包里出现一张未来日期的医院缴费单' }],
+    resources: [{ item: '未来日期的医院缴费单' }],
+    arcs: [{ character: '林澈' }]
+  });
+
+  assert.equal(project.characters[0].knowledge, '');
+  assert.equal(project.characters[0].lastSeen, '');
+  assert.equal(project.hooks[0].payoffBy, '');
+  assert.equal(project.hooks[0].note, '');
+  assert.equal(project.resources[0].owner, '');
+  assert.equal(project.resources[0].status, '');
+  assert.equal(project.arcs[0].pressure, '');
+  assert.equal(project.arcs[0].target, '');
+});
+
 test('builds task-specific prompts with story context', () => {
   const prompt = buildPrompt('plan', DEFAULT_PROJECT, { instruction: 'push the first irreversible choice' });
   assert.match(prompt, /章节策划/);

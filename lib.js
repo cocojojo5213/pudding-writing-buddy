@@ -162,7 +162,6 @@ export function normalizeProject(input = {}) {
   merged.resources = normalizeList(merged.resources, normalizeResource, 'resource');
   merged.arcs = normalizeList(merged.arcs, normalizeArc, 'arc');
   merged.chapters = normalizeList(merged.chapters, normalizeChapter, 'chapter');
-  enrichProjectDefaults(merged, base);
   merged.versionToken = asString(isPlainObject(input) ? input.versionToken : '', '');
   merged.updatedAt = asString(merged.updatedAt, base.updatedAt).trim() || base.updatedAt;
   return merged;
@@ -1173,21 +1172,4 @@ function deepFreeze(value) {
   Object.freeze(value);
   for (const item of Object.values(value)) deepFreeze(item);
   return value;
-}
-
-function enrichProjectDefaults(project, defaults) {
-  fillByKey(project.characters, defaults.characters, 'name', ['lastSeen', 'knowledge']);
-  fillByKey(project.hooks, defaults.hooks, 'text', ['payoffBy', 'note']);
-  fillByKey(project.resources, defaults.resources, 'item', ['owner', 'quantity', 'status', 'note']);
-  fillByKey(project.arcs, defaults.arcs, 'character', ['start', 'current', 'target', 'pressure']);
-}
-
-function fillByKey(items, defaults, key, fields) {
-  for (const item of items) {
-    const fallback = defaults.find((candidate) => candidate[key] && candidate[key] === item[key]);
-    if (!fallback) continue;
-    for (const field of fields) {
-      if (!item[field]) item[field] = fallback[field] || '';
-    }
-  }
 }
