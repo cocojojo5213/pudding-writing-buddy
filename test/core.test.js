@@ -39,6 +39,13 @@ test('normalization rounds legacy fractional target word counts', () => {
   assert.equal(project.targetWords, 1201);
 });
 
+test('normalization falls back for malformed legacy target word counts', () => {
+  for (const targetWords of [null, true, [], {}, '', '   ', '1e3', '0x500']) {
+    const project = normalizeProject({ targetWords });
+    assert.equal(project.targetWords, 2200);
+  }
+});
+
 test('normalization preserves timestamps and exported default is immutable', () => {
   const updatedAt = '2024-01-02T03:04:05.000Z';
   const project = normalizeProject({ ...createDefaultProject(), updatedAt });

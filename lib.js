@@ -1227,7 +1227,11 @@ function clampNumber(value, min, max, fallback) {
 }
 
 function clampInteger(value, min, max, fallback) {
-  const number = clampNumber(value, min, max, fallback);
+  const raw = typeof value === 'string' ? value.trim() : value;
+  if (raw === undefined || raw === null || raw === '') return fallback;
+  if (typeof raw !== 'number' && typeof raw !== 'string') return fallback;
+  if (typeof raw === 'string' && !/^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(raw)) return fallback;
+  const number = clampNumber(raw, min, max, fallback);
   return Math.round(number);
 }
 
