@@ -156,7 +156,7 @@ async function handleApi(request, response) {
     const projectInput = readProjectSavePayload(body);
     const saved = await saveProjectIfVersion(projectInput, {
       expectedVersionToken: body.expectedVersionToken ?? projectInput.versionToken,
-      expectedUpdatedAt: body.expectedUpdatedAt || projectInput.updatedAt
+      expectedUpdatedAt: body.expectedUpdatedAt ?? projectInput.updatedAt
     });
     sendJson(response, 200, saved);
     return;
@@ -182,7 +182,7 @@ async function handleApi(request, response) {
     const chapter = readChapterSettlementPayload(body);
     const result = await settleProjectIfVersion(explicitProject || await loadProject(), chapter, {
       expectedVersionToken: body.expectedVersionToken ?? explicitProject?.versionToken,
-      expectedUpdatedAt: body.expectedUpdatedAt || explicitProject?.updatedAt
+      expectedUpdatedAt: body.expectedUpdatedAt ?? explicitProject?.updatedAt
     });
     sendJson(response, 200, result);
     return;
@@ -305,19 +305,29 @@ async function withProjectWriteLock(operation) {
 }
 
 async function assertProjectVersion({ expectedVersionToken, expectedUpdatedAt } = {}) {
+  assertProjectVersionMetadataShape({ expectedVersionToken, expectedUpdatedAt });
   const hasExpectedToken = expectedVersionToken !== undefined && expectedVersionToken !== null;
   const current = await readProjectIfPresent();
   if (!current) return null;
   if (!hasExpectedToken && !expectedUpdatedAt) {
     throw new HttpError(409, 'Project version is required before writing. Reload before saving to avoid overwriting newer work.');
   }
-  if (hasExpectedToken && current.versionToken !== String(expectedVersionToken)) {
+  if (hasExpectedToken && current.versionToken !== expectedVersionToken) {
     throw new HttpError(409, 'Project changed on disk. Reload before saving to avoid overwriting newer work.');
   }
   if (!hasExpectedToken && current.updatedAt !== expectedUpdatedAt) {
     throw new HttpError(409, 'Project changed on disk. Reload before saving to avoid overwriting newer work.');
   }
   return current;
+}
+
+function assertProjectVersionMetadataShape({ expectedVersionToken, expectedUpdatedAt } = {}) {
+  if (expectedVersionToken !== undefined && expectedVersionToken !== null && typeof expectedVersionToken !== 'string') {
+    throw new HttpError(400, 'Project version token must be a string.');
+  }
+  if (expectedUpdatedAt !== undefined && expectedUpdatedAt !== null && typeof expectedUpdatedAt !== 'string') {
+    throw new HttpError(400, 'Project updated timestamp must be a string.');
+  }
 }
 
 function chapterInputForSettlement(project, chapterInput) {

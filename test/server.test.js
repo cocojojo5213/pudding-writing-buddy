@@ -140,6 +140,69 @@ test('api rejects blind writes when a project version exists', async () => {
   }
 });
 
+test('api rejects malformed project version metadata before writing', async () => {
+  const app = await startApp();
+  try {
+    const project = (await requestJson(app.baseUrl, '/api/project')).body;
+    const malformedSave = await requestJson(app.baseUrl, '/api/project', {
+      method: 'POST',
+      body: JSON.stringify({
+        project: {
+          ...project,
+          title: 'Malformed Token Save'
+        },
+        expectedVersionToken: [project.versionToken]
+      })
+    });
+    assert.equal(malformedSave.status, 400);
+    assert.match(malformedSave.body.error, /version token must be a string/i);
+
+    const tokenlessProject = JSON.parse(JSON.stringify(project));
+    delete tokenlessProject.versionToken;
+    const malformedUpdatedAtSave = await requestJson(app.baseUrl, '/api/project', {
+      method: 'POST',
+      body: JSON.stringify({
+        project: {
+          ...tokenlessProject,
+          title: 'Malformed Timestamp Save'
+        },
+        expectedUpdatedAt: { value: project.updatedAt }
+      })
+    });
+    assert.equal(malformedUpdatedAtSave.status, 400);
+    assert.match(malformedUpdatedAtSave.body.error, /updated timestamp must be a string/i);
+
+    const malformedSettle = await requestJson(app.baseUrl, '/api/settle', {
+      method: 'POST',
+      body: JSON.stringify({
+        project,
+        expectedVersionToken: [project.versionToken],
+        chapter: {
+          id: 'malformed-version-settle',
+          title: '畸形版本沉淀',
+          body: '林澈看见电梯按钮亮起。'
+        }
+      })
+    });
+    assert.equal(malformedSettle.status, 400);
+    assert.match(malformedSettle.body.error, /version token must be a string/i);
+
+    const malformedReset = await requestJson(app.baseUrl, '/api/reset', {
+      method: 'POST',
+      body: JSON.stringify({ expectedVersionToken: [project.versionToken] })
+    });
+    assert.equal(malformedReset.status, 400);
+    assert.match(malformedReset.body.error, /version token must be a string/i);
+
+    const saved = JSON.parse(await readFile(path.join(app.dataDir, 'project.json'), 'utf8'));
+    assert.equal(saved.title, project.title);
+    assert.equal(saved.versionToken, project.versionToken);
+    assert.equal(saved.chapters.length, 0);
+  } finally {
+    await app.stop();
+  }
+});
+
 test('api rejects project saves without a complete project payload', async () => {
   const app = await startApp();
   try {
