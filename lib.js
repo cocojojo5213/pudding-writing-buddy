@@ -147,19 +147,19 @@ export function normalizeProject(input = {}) {
   const base = createDefaultProject();
   const merged = { ...base, ...(isPlainObject(input) ? input : {}) };
   merged.schemaVersion = PROJECT_SCHEMA_VERSION;
-  merged.title = asString(merged.title, base.title);
-  merged.genre = asString(merged.genre, base.genre);
-  merged.logline = asString(merged.logline, base.logline);
-  merged.protagonist = asString(merged.protagonist, base.protagonist);
+  merged.title = projectText(merged.title, base.title);
+  merged.genre = projectText(merged.genre, base.genre);
+  merged.logline = projectText(merged.logline, base.logline);
+  merged.protagonist = projectText(merged.protagonist, base.protagonist);
   merged.targetWords = clampInteger(merged.targetWords, MIN_TARGET_WORDS, MAX_TARGET_WORDS, base.targetWords);
   merged.language = merged.language === 'en' ? 'en' : 'zh';
-  merged.authorIntent = asString(merged.authorIntent, base.authorIntent);
-  merged.currentFocus = asString(merged.currentFocus, base.currentFocus);
-  merged.storyBible = asString(merged.storyBible, base.storyBible);
-  merged.notes = asString(merged.notes, '');
-  merged.bookRules = asString(merged.bookRules, base.bookRules);
-  merged.bannedPatterns = asString(merged.bannedPatterns, base.bannedPatterns);
-  merged.styleProfile = asString(merged.styleProfile, '');
+  merged.authorIntent = projectText(merged.authorIntent, base.authorIntent);
+  merged.currentFocus = projectText(merged.currentFocus, base.currentFocus);
+  merged.storyBible = projectText(merged.storyBible, base.storyBible);
+  merged.notes = projectText(merged.notes, '');
+  merged.bookRules = projectText(merged.bookRules, base.bookRules);
+  merged.bannedPatterns = projectText(merged.bannedPatterns, base.bannedPatterns);
+  merged.styleProfile = projectText(merged.styleProfile, '');
   merged.characters = normalizeList(merged.characters, normalizeCharacter, 'character');
   merged.hooks = normalizeList(merged.hooks, normalizeHook, 'hook');
   merged.outline = normalizeList(merged.outline, normalizeOutlineNode, 'outline');
@@ -167,13 +167,13 @@ export function normalizeProject(input = {}) {
   merged.resources = normalizeList(merged.resources, normalizeResource, 'resource');
   merged.arcs = normalizeList(merged.arcs, normalizeArc, 'arc');
   merged.chapters = normalizeList(merged.chapters, normalizeChapter, 'chapter');
-  merged.versionToken = asString(isPlainObject(input) ? input.versionToken : '', '');
-  merged.updatedAt = asString(merged.updatedAt, base.updatedAt).trim() || base.updatedAt;
+  merged.versionToken = projectText(isPlainObject(input) ? input.versionToken : '', '');
+  merged.updatedAt = projectText(merged.updatedAt, base.updatedAt).trim() || base.updatedAt;
   return merged;
 }
 
 export function buildPrompt(task, project, payload = {}) {
-  payload = isPlainObject(payload) ? payload : {};
+  payload = normalizeAssistPayload(payload);
   const normalized = normalizeProject(project);
   const context = buildContextPacket(normalized, payload.chapterId || payload.chapterNumber);
   if (task === 'plan') {
@@ -227,7 +227,7 @@ export function buildPrompt(task, project, payload = {}) {
 }
 
 export function offlineAssist(task, project, payload = {}) {
-  payload = isPlainObject(payload) ? payload : {};
+  payload = normalizeAssistPayload(payload);
   const normalized = normalizeProject(project);
   if (task === 'plan') return offlinePlan(normalized, payload);
   if (task === 'draft') return offlineDraft(normalized, payload);
@@ -860,13 +860,13 @@ function normalizeList(value, normalizer, idPrefix) {
 function normalizeCharacter(item = {}, fallbackId = deterministicId('character', item, 0)) {
   return {
     id: asId(item.id, fallbackId),
-    name: asString(item.name, ''),
-    role: asString(item.role, ''),
-    desire: asString(item.desire, ''),
-    conflict: asString(item.conflict, ''),
-    secret: asString(item.secret, ''),
-    lastSeen: asString(item.lastSeen, ''),
-    knowledge: asString(item.knowledge, '')
+    name: projectText(item.name, ''),
+    role: projectText(item.role, ''),
+    desire: projectText(item.desire, ''),
+    conflict: projectText(item.conflict, ''),
+    secret: projectText(item.secret, ''),
+    lastSeen: projectText(item.lastSeen, ''),
+    knowledge: projectText(item.knowledge, '')
   };
 }
 
@@ -874,66 +874,66 @@ function normalizeHook(item = {}, fallbackId = deterministicId('hook', item, 0))
   const status = VALID_HOOK_STATUSES.includes(item.status) ? item.status : 'open';
   return {
     id: asId(item.id, fallbackId),
-    text: asString(item.text, ''),
+    text: projectText(item.text, ''),
     status,
-    plantedIn: asString(item.plantedIn, ''),
-    payoffBy: asString(item.payoffBy, ''),
-    note: asString(item.note, '')
+    plantedIn: projectText(item.plantedIn, ''),
+    payoffBy: projectText(item.payoffBy, ''),
+    note: projectText(item.note, '')
   };
 }
 
 function normalizeOutlineNode(item = {}, fallbackId = deterministicId('outline', item, 0)) {
   return {
     id: asId(item.id, fallbackId),
-    title: asString(item.title, ''),
-    summary: asString(item.summary, '')
+    title: projectText(item.title, ''),
+    summary: projectText(item.summary, '')
   };
 }
 
 function normalizeTimelineEvent(item = {}, fallbackId = deterministicId('timeline', item, 0)) {
   return {
     id: asId(item.id, fallbackId),
-    source: asString(item.source, ''),
-    chapterId: asString(item.chapterId, ''),
-    chapter: asString(item.chapter, ''),
-    event: asString(item.event, ''),
-    consequence: asString(item.consequence, '')
+    source: projectText(item.source, ''),
+    chapterId: projectText(item.chapterId, ''),
+    chapter: projectText(item.chapter, ''),
+    event: projectText(item.event, ''),
+    consequence: projectText(item.consequence, '')
   };
 }
 
 function normalizeResource(item = {}, fallbackId = deterministicId('resource', item, 0)) {
   return {
     id: asId(item.id, fallbackId),
-    owner: asString(item.owner, ''),
-    item: asString(item.item, ''),
-    quantity: asString(item.quantity, ''),
-    status: asString(item.status, ''),
-    note: asString(item.note, '')
+    owner: projectText(item.owner, ''),
+    item: projectText(item.item, ''),
+    quantity: projectText(item.quantity, ''),
+    status: projectText(item.status, ''),
+    note: projectText(item.note, '')
   };
 }
 
 function normalizeArc(item = {}, fallbackId = deterministicId('arc', item, 0)) {
   return {
     id: asId(item.id, fallbackId),
-    character: asString(item.character, ''),
-    start: asString(item.start, ''),
-    current: asString(item.current, ''),
-    target: asString(item.target, ''),
-    pressure: asString(item.pressure, '')
+    character: projectText(item.character, ''),
+    start: projectText(item.start, ''),
+    current: projectText(item.current, ''),
+    target: projectText(item.target, ''),
+    pressure: projectText(item.pressure, '')
   };
 }
 
 function normalizeChapter(item = {}, fallbackId = deterministicId('chapter', item, 0)) {
   return {
     id: asId(item.id, fallbackId),
-    title: asString(item.title, ''),
-    body: Object.hasOwn(item, 'body') ? asString(item.body, '') : asString(item.text, ''),
-    plan: asString(item.plan, ''),
-    audit: asString(item.audit, ''),
-    summary: asString(item.summary, ''),
-    status: asString(item.status, 'draft'),
-    createdAt: asString(item.createdAt, ''),
-    settledAt: asString(item.settledAt, '')
+    title: projectText(item.title, ''),
+    body: normalizeChapterBody(item),
+    plan: projectText(item.plan, ''),
+    audit: projectText(item.audit, ''),
+    summary: projectText(item.summary, ''),
+    status: projectText(item.status, 'draft'),
+    createdAt: projectText(item.createdAt, ''),
+    settledAt: projectText(item.settledAt, '')
   };
 }
 
@@ -1149,6 +1149,36 @@ function hasCjk(text = '') {
 function asString(value, fallback = '') {
   if (value === undefined || value === null) return fallback;
   return String(value);
+}
+
+function projectText(value, fallback = '') {
+  if (!isProjectTextValue(value)) return fallback;
+  return String(value);
+}
+
+function normalizeAssistPayload(payload) {
+  if (!isPlainObject(payload)) return {};
+  return {
+    ...payload,
+    instruction: projectText(payload.instruction, ''),
+    plan: projectText(payload.plan, ''),
+    text: projectText(payload.text, ''),
+    audit: projectText(payload.audit, ''),
+    chapterId: projectText(payload.chapterId, ''),
+    chapterNumber: projectText(payload.chapterNumber, '')
+  };
+}
+
+function isProjectTextValue(value) {
+  return typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value));
+}
+
+function normalizeChapterBody(item) {
+  if (Object.hasOwn(item, 'body')) {
+    if (isProjectTextValue(item.body)) return projectText(item.body, '');
+    return projectText(item.text, '');
+  }
+  return projectText(item.text, '');
 }
 
 function asId(value, fallback) {

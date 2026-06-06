@@ -54,6 +54,63 @@ test('normalization preserves timestamps and exported default is immutable', () 
   assert.equal(Object.isFrozen(DEFAULT_PROJECT.characters), true);
 });
 
+test('normalization drops malformed legacy project text fields', () => {
+  const project = normalizeProject({
+    title: { value: 'Object Title' },
+    genre: ['array genre'],
+    logline: true,
+    protagonist: 123,
+    notes: ['note one', 'note two'],
+    styleProfile: { text: 'style' },
+    versionToken: { value: 'token' },
+    updatedAt: ['2026-06-07T00:00:00.000Z'],
+    characters: [{
+      id: 'malformed-text-character',
+      name: { text: '阿宁' },
+      role: ['调查员'],
+      desire: 42,
+      conflict: false
+    }],
+    timeline: [{
+      id: 'malformed-text-timeline',
+      chapterId: ['chapter-1'],
+      chapter: { title: '第一章' },
+      event: true,
+      consequence: 7
+    }],
+    resources: [{
+      id: 'malformed-text-resource',
+      owner: { name: '阿宁' },
+      item: ['旧照片'],
+      quantity: 3,
+      status: false,
+      note: null
+    }]
+  });
+
+  assert.equal(project.title, DEFAULT_PROJECT.title);
+  assert.equal(project.genre, DEFAULT_PROJECT.genre);
+  assert.equal(project.logline, DEFAULT_PROJECT.logline);
+  assert.equal(project.protagonist, '123');
+  assert.equal(project.notes, '');
+  assert.equal(project.styleProfile, '');
+  assert.equal(project.versionToken, '');
+  assert.notEqual(project.updatedAt, '2026-06-07T00:00:00.000Z');
+  assert.equal(project.characters[0].name, '');
+  assert.equal(project.characters[0].role, '');
+  assert.equal(project.characters[0].desire, '42');
+  assert.equal(project.characters[0].conflict, '');
+  assert.equal(project.timeline[0].chapterId, '');
+  assert.equal(project.timeline[0].chapter, '');
+  assert.equal(project.timeline[0].event, '');
+  assert.equal(project.timeline[0].consequence, '7');
+  assert.equal(project.resources[0].owner, '');
+  assert.equal(project.resources[0].item, '');
+  assert.equal(project.resources[0].quantity, '3');
+  assert.equal(project.resources[0].status, '');
+  assert.equal(JSON.stringify(project), JSON.stringify(project).replace(/\[object Object\]|array genre|note one,note two|旧照片/g, ''));
+});
+
 test('normalization gives legacy items stable ids without inventing timestamps', () => {
   const legacy = {
     title: 'Legacy Import',
@@ -154,6 +211,35 @@ test('normalization migrates legacy chapter text without reviving cleared bodies
   assert.equal(explicitlyCleared.chapters[0].body, '');
 });
 
+test('normalization falls back to legacy chapter text when body shape is malformed', () => {
+  const project = normalizeProject({
+    chapters: [
+      {
+        id: 'malformed-body-with-legacy-text',
+        title: { text: '坏标题' },
+        body: { text: '坏正文形状' },
+        text: '旧版正文应保留。',
+        plan: ['坏计划'],
+        audit: false,
+        summary: 9
+      },
+      {
+        id: 'empty-body-still-cleared',
+        title: '已清空正文',
+        body: '',
+        text: '旧版正文不应复活。'
+      }
+    ]
+  });
+
+  assert.equal(project.chapters[0].title, '');
+  assert.equal(project.chapters[0].body, '旧版正文应保留。');
+  assert.equal(project.chapters[0].plan, '');
+  assert.equal(project.chapters[0].audit, '');
+  assert.equal(project.chapters[0].summary, '9');
+  assert.equal(project.chapters[1].body, '');
+});
+
 test('normalization does not leak default story details into matching user entries', () => {
   const project = normalizeProject({
     characters: [{ name: '林澈' }],
@@ -179,6 +265,35 @@ test('builds task-specific prompts with story context', () => {
   assert.match(prompt, /push the first irreversible choice/);
   assert.match(prompt, /Context Packet/);
   assert.match(prompt, /Resources/);
+});
+
+test('assistant prompt payload text fields drop malformed object and array values', () => {
+  const planPrompt = buildPrompt('plan', DEFAULT_PROJECT, { instruction: { text: 'fake instruction' } });
+  const draftPrompt = buildPrompt('draft', DEFAULT_PROJECT, { plan: ['fake plan'] });
+  const auditPrompt = buildPrompt('audit', DEFAULT_PROJECT, { plan: { text: 'fake plan' }, text: ['fake draft'] });
+  const revisePrompt = buildPrompt('revise', DEFAULT_PROJECT, { audit: { text: 'fake audit' }, text: ['fake source'] });
+  const fallbackPrompt = buildPrompt('unknown-task', DEFAULT_PROJECT, { instruction: { text: 'fake task' } });
+
+  for (const prompt of [planPrompt, draftPrompt, auditPrompt, revisePrompt, fallbackPrompt]) {
+    assert.doesNotMatch(prompt, /\[object Object\]/);
+    assert.doesNotMatch(prompt, /fake instruction|fake plan|fake draft|fake audit|fake source|fake task/);
+  }
+  assert.match(planPrompt, /额外指令：让主角面对第一个不可逆选择/);
+  assert.match(draftPrompt, /章节计划：\n按当前焦点写下一章。/);
+  assert.match(auditPrompt, /章节计划：\n未提供/);
+  assert.match(revisePrompt, /审校意见：\n+\s*原文：\n$/);
+  assert.match(fallbackPrompt, /任务：辅助写作/);
+});
+
+test('offline assist sanitizes malformed payload text fields', () => {
+  const style = offlineAssist('style', DEFAULT_PROJECT, { text: { value: 'fake style' } });
+  const audit = offlineAssist('audit', DEFAULT_PROJECT, { text: ['fake draft'], plan: { value: 'fake plan' } });
+  const revision = offlineAssist('revise', DEFAULT_PROJECT, { text: ['fake source'], audit: { value: 'fake audit' } });
+
+  assert.equal(style, '没有文本可分析。');
+  assert.match(audit, /正文为空/);
+  assert.doesNotMatch(audit, /fake draft|fake plan|\[object Object\]/);
+  assert.equal(revision, '原文为空，无法修订。');
 });
 
 test('offline planner and draft produce usable chapter text', () => {
