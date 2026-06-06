@@ -996,7 +996,10 @@ function resolveChapterNumber(project, chapterRef) {
     const index = project.chapters.findIndex((chapter) => chapter.id === String(chapterRef));
     if (index >= 0) return index + 1;
   }
-  if (Number.isFinite(Number(chapterRef))) return Math.max(1, Number(chapterRef));
+  const text = String(chapterRef ?? '').trim();
+  if (!text) return project.chapters.length + 1;
+  const number = Number(text);
+  if (Number.isInteger(number)) return Math.max(1, number);
   return project.chapters.length + 1;
 }
 

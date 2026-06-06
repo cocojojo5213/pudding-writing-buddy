@@ -276,6 +276,27 @@ test('numeric-looking chapter ids resolve as ids before chapter numbers', () => 
   assert.doesNotMatch(context, /第二章摘要/);
 });
 
+test('fractional and empty chapter refs fall back to the next chapter', () => {
+  const project = normalizeProject({
+    ...createDefaultProject(),
+    chapters: [
+      { id: 'chapter-1', title: '第一章', body: '第一章正文。', summary: '第一章摘要。' },
+      { id: 'chapter-2', title: '第二章', body: '第二章正文。', summary: '第二章摘要。' }
+    ]
+  });
+
+  const fractionalContext = buildContextPacket(project, '1.5');
+  const emptyContext = buildContextPacket(project, null);
+  const plan = offlineAssist('plan', project, { chapterNumber: '1.5' });
+
+  assert.match(fractionalContext, /Next chapter: 3/);
+  assert.doesNotMatch(fractionalContext, /Next chapter: 1\.5/);
+  assert.match(fractionalContext, /## Prior Chapter\n第二章: 第二章摘要。/);
+  assert.match(emptyContext, /Next chapter: 3/);
+  assert.match(plan, /^# 第3章计划/m);
+  assert.doesNotMatch(plan, /第1\.5章/);
+});
+
 test('draft quality detects AI phrasing and continuity risk', () => {
   const project = normalizeProject(createDefaultProject());
   const text = '林澈知道命运的齿轮开始转动。林澈知道命运的齿轮开始转动。';
