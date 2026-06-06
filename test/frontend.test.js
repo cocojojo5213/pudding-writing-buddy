@@ -43,6 +43,68 @@ test('typing into an empty chapter editor preserves the first edit on save', asy
   assert.equal(savedPayloads[0].project.chapters[0].body, '第一句不能被创建章节时的重绘抹掉。');
 });
 
+test('markdown export clicks a mounted link and revokes the object URL after cleanup', async () => {
+  const clickedLinks = [];
+  const dom = createDomHarness({
+    onElementCreated(element) {
+      if (element.tagName === 'A') {
+        element.clickHook = () => {
+          clickedLinks.push({
+            href: element.href,
+            download: element.download,
+            isConnected: element.isConnected,
+            display: element.style.display
+          });
+        };
+      }
+    }
+  });
+  const project = createDefaultProject();
+  const revokedUrls = [];
+
+  globalThis.document = dom.document;
+  globalThis.window = dom.window;
+  globalThis.localStorage = createStorage();
+  globalThis.URL = {
+    createObjectURL(blob) {
+      assert.equal(blob.type, 'text/markdown;charset=utf-8');
+      return 'blob:pudding-export';
+    },
+    revokeObjectURL(url) {
+      revokedUrls.push(url);
+    }
+  };
+  globalThis.fetch = async (requestPath, options = {}) => {
+    if (requestPath === '/api/project') return jsonResponse(project);
+    if (requestPath === '/api/export' && options.method === 'POST') {
+      const payload = JSON.parse(options.body);
+      assert.equal(payload.project.title, project.title);
+      return jsonResponse({
+        filename: 'Pudding.md',
+        markdown: '# Pudding\n\n正文'
+      });
+    }
+    throw new Error(`Unexpected fetch: ${requestPath}`);
+  };
+
+  const moduleUrl = pathToFileURL(path.join(APP_ROOT, 'public/app.js'));
+  await import(`${moduleUrl.href}?frontend-test=${Date.now()}`);
+  await waitFor(() => dom.byId('save-state').textContent === 'Ready');
+
+  dom.byId('export-md').click();
+
+  await waitFor(() => clickedLinks.length === 1);
+  assert.deepEqual(clickedLinks[0], {
+    href: 'blob:pudding-export',
+    download: 'Pudding.md',
+    isConnected: true,
+    display: 'none'
+  });
+  assert.equal(dom.document.body.children.length, 0);
+
+  await waitFor(() => revokedUrls.includes('blob:pudding-export'));
+});
+
 function jsonResponse(body, status = 200) {
   return {
     ok: status >= 200 && status < 300,
@@ -68,7 +130,7 @@ function createStorage() {
   };
 }
 
-function createDomHarness() {
+function createDomHarness(options = {}) {
   const elements = new Map();
   const allElements = [];
 
@@ -165,7 +227,9 @@ function createDomHarness() {
       return [];
     },
     createElement(tagName) {
-      return new TestElement(tagName.toUpperCase());
+      const element = new TestElement(tagName.toUpperCase());
+      options.onElementCreated?.(element);
+      return element;
     }
   };
 
@@ -192,6 +256,10 @@ class TestElement {
     this.innerHTML = '';
     this.className = '';
     this.disabled = false;
+    this.children = [];
+    this.parentNode = null;
+    this.style = {};
+    this.clickHook = null;
   }
 
   addEventListener(type, handler) {
@@ -206,7 +274,25 @@ class TestElement {
   }
 
   click() {
+    this.clickHook?.(this);
     this.dispatchEvent({ type: 'click' });
+  }
+
+  appendChild(child) {
+    if (child.parentNode) child.remove();
+    this.children.push(child);
+    child.parentNode = this;
+    return child;
+  }
+
+  remove() {
+    if (!this.parentNode) return;
+    this.parentNode.children = this.parentNode.children.filter((child) => child !== this);
+    this.parentNode = null;
+  }
+
+  get isConnected() {
+    return this.tagName === 'BODY' || Boolean(this.parentNode?.isConnected);
   }
 }
 

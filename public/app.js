@@ -493,8 +493,14 @@ async function exportMarkdown() {
   const link = document.createElement('a');
   link.href = url;
   link.download = result.filename;
-  link.click();
-  URL.revokeObjectURL(url);
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  try {
+    link.click();
+  } finally {
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
 }
 
 async function resetProject() {
