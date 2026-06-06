@@ -142,7 +142,7 @@ function renderProjectFields() {
 }
 
 function renderMetrics() {
-  const metrics = deriveLocalMetrics();
+  const metrics = { ...deriveLocalMetrics(), ...(state.metrics || {}) };
   $('#metrics').innerHTML = [
     metric('Chapters', metrics.chapters),
     metric('Length', metrics.totalLength),

@@ -145,6 +145,47 @@ test('invalid target words are shown locally and not autosaved', async () => {
   }
 });
 
+test('metrics refresh renders server metrics instead of stale local counts', async () => {
+  const dom = createDomHarness();
+  const project = createDefaultProject();
+  let metricsRequests = 0;
+
+  globalThis.document = dom.document;
+  globalThis.window = dom.window;
+  globalThis.localStorage = createStorage();
+  globalThis.fetch = async (requestPath) => {
+    if (requestPath === '/api/project') return jsonResponse(project);
+    if (requestPath === '/api/metrics') {
+      metricsRequests += 1;
+      return jsonResponse({
+        chapters: 4,
+        totalLength: 12345,
+        averageLength: 3086,
+        openHooks: 7,
+        settledChapters: 2,
+        timelineEvents: 11,
+        resources: 12,
+        arcs: 13
+      });
+    }
+    throw new Error(`Unexpected fetch: ${requestPath}`);
+  };
+
+  const moduleUrl = pathToFileURL(path.join(APP_ROOT, 'public/app.js'));
+  await import(`${moduleUrl.href}?frontend-test=${Date.now()}`);
+  await waitFor(() => dom.byId('save-state').textContent === 'Ready');
+
+  assert.match(dom.byId('metrics').innerHTML, /<span>Chapters<\/span><strong>0<\/strong>/);
+
+  dom.byId('refresh-metrics').click();
+
+  await waitFor(() => dom.byId('metrics').innerHTML.includes('<span>Chapters</span><strong>4</strong>'));
+  assert.equal(metricsRequests, 1);
+  assert.match(dom.byId('metrics').innerHTML, /<span>Length<\/span><strong>12345<\/strong>/);
+  assert.match(dom.byId('metrics').innerHTML, /<span>Settled<\/span><strong>2\/4<\/strong>/);
+  assert.match(dom.byId('metrics').innerHTML, /<span>Truth<\/span><strong>11\/12\/13<\/strong>/);
+});
+
 test('markdown export clicks a mounted link and revokes the object URL after cleanup', async () => {
   const clickedLinks = [];
   const dom = createDomHarness({
