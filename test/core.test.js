@@ -61,6 +61,27 @@ test('normalization gives legacy items stable ids without inventing timestamps',
   assert.equal(explicit.chapters[0].id, 'kept-id');
 });
 
+test('normalization migrates legacy chapter text without reviving cleared bodies', () => {
+  const legacyTextOnly = normalizeProject({
+    chapters: [{
+      id: 'legacy-text-only',
+      title: '旧字段正文',
+      text: '旧版正文应迁移。'
+    }]
+  });
+  assert.equal(legacyTextOnly.chapters[0].body, '旧版正文应迁移。');
+
+  const explicitlyCleared = normalizeProject({
+    chapters: [{
+      id: 'cleared-body',
+      title: '已清空正文',
+      body: '',
+      text: '旧字段正文不应复活。'
+    }]
+  });
+  assert.equal(explicitlyCleared.chapters[0].body, '');
+});
+
 test('normalization does not leak default story details into matching user entries', () => {
   const project = normalizeProject({
     characters: [{ name: '林澈' }],

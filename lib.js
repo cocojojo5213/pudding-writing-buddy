@@ -898,7 +898,7 @@ function normalizeChapter(item = {}, fallbackId = deterministicId('chapter', ite
   return {
     id: asId(item.id, fallbackId),
     title: asString(item.title, ''),
-    body: asString(item.body || item.text, ''),
+    body: Object.hasOwn(item, 'body') ? asString(item.body, '') : asString(item.text, ''),
     plan: asString(item.plan, ''),
     audit: asString(item.audit, ''),
     summary: asString(item.summary, ''),
