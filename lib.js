@@ -1017,14 +1017,15 @@ function makeFinding(severity, title, suggestion) {
 }
 
 function resolveChapterNumber(project, chapterRef) {
-  if (chapterRef) {
-    const index = project.chapters.findIndex((chapter) => chapter.id === String(chapterRef));
+  if (isChapterReferenceValue(chapterRef)) {
+    const text = String(chapterRef).trim();
+    const index = project.chapters.findIndex((chapter) => chapter.id === text);
     if (index >= 0) return index + 1;
+    if (text) {
+      const number = Number(text);
+      if (Number.isInteger(number)) return Math.max(1, number);
+    }
   }
-  const text = String(chapterRef ?? '').trim();
-  if (!text) return project.chapters.length + 1;
-  const number = Number(text);
-  if (Number.isInteger(number)) return Math.max(1, number);
   return project.chapters.length + 1;
 }
 
@@ -1170,6 +1171,10 @@ function normalizeAssistPayload(payload) {
 }
 
 function isProjectTextValue(value) {
+  return typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value));
+}
+
+function isChapterReferenceValue(value) {
   return typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value));
 }
 

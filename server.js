@@ -166,7 +166,7 @@ async function handleApi(request, response) {
     const body = await readJson(request);
     const project = normalizeProject(await readOptionalProjectPayload(body));
     const payload = readAssistPayload(body);
-    const task = String(body.task || 'brainstorm');
+    const task = readAssistTask(body);
     if (!KNOWN_TASKS.has(task)) throw new HttpError(400, `Unknown assist task: ${task}`);
     const modelConfig = readModelConfigPayload(body);
     const output = task === 'style' || task === 'context' || task === 'settle' || !isUsableModelConfig(modelConfig)
@@ -400,6 +400,14 @@ function readAssistPayload(body) {
     throw new HttpError(400, 'Assist payload must be an object.');
   }
   return body.payload;
+}
+
+function readAssistTask(body) {
+  if (!Object.hasOwn(body, 'task')) return 'brainstorm';
+  if (typeof body.task !== 'string') {
+    throw new HttpError(400, 'Assist task must be a string.');
+  }
+  return body.task;
 }
 
 function readModelConfigPayload(body) {

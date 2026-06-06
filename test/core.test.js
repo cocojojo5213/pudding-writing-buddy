@@ -450,6 +450,25 @@ test('fractional and empty chapter refs fall back to the next chapter', () => {
   assert.doesNotMatch(plan, /第1\.5章/);
 });
 
+test('malformed chapter refs are not stringified into ids or chapter numbers', () => {
+  const project = normalizeProject({
+    ...createDefaultProject(),
+    chapters: [
+      { id: '[object Object]', title: '对象假 ID', body: '对象假 ID 正文。', summary: '对象假 ID 摘要。' },
+      { id: 'true', title: '布尔假 ID', body: '布尔假 ID 正文。', summary: '布尔假 ID 摘要。' },
+      { id: '1,2', title: '数组假 ID', body: '数组假 ID 正文。', summary: '数组假 ID 摘要。' }
+    ]
+  });
+
+  for (const malformedRef of [{ id: '[object Object]' }, true, [1, 2]]) {
+    const context = buildContextPacket(project, malformedRef);
+    assert.match(context, /Next chapter: 4/);
+    assert.match(context, /## Prior Chapter\n数组假 ID: 数组假 ID 摘要。/);
+    assert.doesNotMatch(context, /Next chapter: 1/);
+    assert.doesNotMatch(context, /对象假 ID: 对象假 ID 摘要。/);
+  }
+});
+
 test('draft quality detects AI phrasing and continuity risk', () => {
   const project = normalizeProject(createDefaultProject());
   const text = '林澈知道命运的齿轮开始转动。林澈知道命运的齿轮开始转动。';

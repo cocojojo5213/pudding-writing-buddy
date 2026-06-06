@@ -36,6 +36,22 @@ test('api rejects invalid JSON, wrong methods, and unknown assist tasks', async 
     });
     assert.equal(unknownTask.status, 400);
     assert.match(unknownTask.body.error, /Unknown assist task/);
+
+    for (const task of [[], {}, null, 42, false]) {
+      const malformedTask = await requestJson(app.baseUrl, '/api/assist', {
+        method: 'POST',
+        body: JSON.stringify({ task })
+      });
+      assert.equal(malformedTask.status, 400);
+      assert.match(malformedTask.body.error, /Assist task must be a string/);
+    }
+
+    const blankTask = await requestJson(app.baseUrl, '/api/assist', {
+      method: 'POST',
+      body: JSON.stringify({ task: '' })
+    });
+    assert.equal(blankTask.status, 400);
+    assert.match(blankTask.body.error, /Unknown assist task/);
   } finally {
     await app.stop();
   }
