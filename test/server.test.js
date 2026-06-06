@@ -168,8 +168,49 @@ test('api rejects project saves without a complete project payload', async () =>
     assert.equal(sparseDirectProject.status, 400);
     assert.match(sparseDirectProject.body.error, /complete project data/);
 
+    const missingScalar = JSON.parse(JSON.stringify(savedProject.body));
+    delete missingScalar.logline;
+    const missingScalarProject = await requestJson(app.baseUrl, '/api/project', {
+      method: 'POST',
+      body: JSON.stringify({
+        project: missingScalar,
+        expectedVersionToken: savedProject.body.versionToken
+      })
+    });
+    assert.equal(missingScalarProject.status, 400);
+    assert.match(missingScalarProject.body.error, /Missing fields: logline/);
+
+    const malformedScalar = {
+      ...savedProject.body,
+      title: null
+    };
+    const malformedScalarProject = await requestJson(app.baseUrl, '/api/project', {
+      method: 'POST',
+      body: JSON.stringify({
+        project: malformedScalar,
+        expectedVersionToken: savedProject.body.versionToken
+      })
+    });
+    assert.equal(malformedScalarProject.status, 400);
+    assert.match(malformedScalarProject.body.error, /Malformed fields: title/);
+
+    const malformedCollectionItem = {
+      ...savedProject.body,
+      characters: ['not an object']
+    };
+    const malformedCollectionProject = await requestJson(app.baseUrl, '/api/project', {
+      method: 'POST',
+      body: JSON.stringify({
+        project: malformedCollectionItem,
+        expectedVersionToken: savedProject.body.versionToken
+      })
+    });
+    assert.equal(malformedCollectionProject.status, 400);
+    assert.match(malformedCollectionProject.body.error, /Malformed collection items: characters\[0\]/);
+
     const saved = JSON.parse(await readFile(path.join(app.dataDir, 'project.json'), 'utf8'));
     assert.equal(saved.title, 'Payload Boundary Title');
+    assert.equal(saved.versionToken, savedProject.body.versionToken);
   } finally {
     await app.stop();
   }
@@ -200,6 +241,12 @@ test('api rejects sparse explicit project payloads on project-reading routes', a
   const app = await startApp();
   try {
     const project = (await requestJson(app.baseUrl, '/api/project')).body;
+    const missingScalarProject = JSON.parse(JSON.stringify(project));
+    delete missingScalarProject.logline;
+    const malformedCollectionProject = {
+      ...project,
+      hooks: ['not an object']
+    };
     for (const [pathname, body] of [
       ['/api/assist', { task: 'brainstorm', project: { title: 'Sparse Assist' } }],
       ['/api/export', { project: { title: 'Sparse Export' } }],
@@ -207,6 +254,12 @@ test('api rejects sparse explicit project payloads on project-reading routes', a
       ['/api/settle', {
         project: { title: 'Sparse Settle' },
         chapter: { id: 'sparse-settle', title: '稀疏项目结算', body: '林澈看见电梯按钮亮起。' }
+      }],
+      ['/api/export', { project: missingScalarProject }],
+      ['/api/snapshot', { project: malformedCollectionProject }],
+      ['/api/settle', {
+        project: missingScalarProject,
+        chapter: { id: 'missing-scalar-settle', title: '缺字段项目结算', body: '林澈看见电梯按钮亮起。' }
       }]
     ]) {
       const response = await requestJson(app.baseUrl, pathname, {

@@ -32,6 +32,22 @@ const DEFAULT_MODEL_MAX_TOKENS = 3500;
 const MIN_MODEL_MAX_TOKENS = 500;
 const MAX_MODEL_MAX_TOKENS = 20_000;
 const STALE_TEMP_MS = parseIntegerSetting(process.env.STALE_TEMP_MS, { defaultValue: 24 * 60 * 60 * 1000, min: 1000 });
+const PROJECT_SCALAR_FIELDS = [
+  'title',
+  'genre',
+  'logline',
+  'protagonist',
+  'targetWords',
+  'language',
+  'authorIntent',
+  'currentFocus',
+  'storyBible',
+  'notes',
+  'bookRules',
+  'bannedPatterns',
+  'styleProfile'
+];
+const PROJECT_TEXT_FIELDS = PROJECT_SCALAR_FIELDS.filter((field) => field !== 'targetWords');
 const PROJECT_COLLECTION_FIELDS = ['characters', 'hooks', 'outline', 'timeline', 'resources', 'arcs', 'chapters'];
 let projectWriteQueue = Promise.resolve();
 
@@ -356,10 +372,30 @@ function readModelConfigPayload(body) {
 }
 
 function assertCompleteProjectPayload(project) {
+  const missingFields = PROJECT_SCALAR_FIELDS.filter((field) => !Object.hasOwn(project, field));
+  const malformedFields = PROJECT_TEXT_FIELDS.filter((field) => Object.hasOwn(project, field) && typeof project[field] !== 'string');
+  if (Object.hasOwn(project, 'targetWords') && !isFiniteNumberValue(project.targetWords)) malformedFields.push('targetWords');
   const missing = PROJECT_COLLECTION_FIELDS.filter((field) => !Array.isArray(project[field]));
-  if (missing.length) {
-    throw new HttpError(400, `Project payload must include complete project data. Missing collections: ${missing.join(', ')}.`);
+  const malformedCollections = PROJECT_COLLECTION_FIELDS.flatMap((field) => {
+    if (!Array.isArray(project[field])) return [];
+    const badIndex = project[field].findIndex((item) => !isPlainObject(item));
+    return badIndex >= 0 ? [`${field}[${badIndex}]`] : [];
+  });
+  if (missingFields.length || malformedFields.length || missing.length || malformedCollections.length) {
+    const details = [];
+    if (missingFields.length) details.push(`Missing fields: ${missingFields.join(', ')}`);
+    if (malformedFields.length) details.push(`Malformed fields: ${malformedFields.join(', ')}`);
+    if (missing.length) details.push(`Missing collections: ${missing.join(', ')}`);
+    if (malformedCollections.length) details.push(`Malformed collection items: ${malformedCollections.join(', ')}`);
+    throw new HttpError(400, `Project payload must include complete project data. ${details.join('. ')}.`);
   }
+}
+
+function isFiniteNumberValue(value) {
+  if (typeof value !== 'number' && typeof value !== 'string') return false;
+  const text = String(value).trim();
+  if (!text) return false;
+  return Number.isFinite(Number(text));
 }
 
 async function readProjectIfPresent() {
