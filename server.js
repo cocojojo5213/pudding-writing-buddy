@@ -1,4 +1,6 @@
-import { createServer } from 'node:http';
+import { lookup as lookupDns } from 'node:dns/promises';
+import { createServer, request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
 import { isIP } from 'node:net';
 import { copyFile, mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -27,6 +29,7 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const REQUEST_BASE_URL = 'http://127.0.0.1';
 const MAX_BODY_BYTES = 5_000_000;
 const MODEL_TIMEOUT_MS = 120_000;
+const MODEL_DNS_ERROR_MESSAGE = 'Model base URL must not resolve to private, link-local, multicast, metadata, or non-localhost loopback addresses.';
 const ALLOW_PRIVATE_MODEL_BASE_URLS = process.env.ALLOW_PRIVATE_MODEL_BASE_URLS === '1';
 const DEFAULT_MODEL_TEMPERATURE = 0.75;
 const MIN_MODEL_TEMPERATURE = 0;
@@ -559,30 +562,23 @@ async function callModel(task, project, payload, config) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), MODEL_TIMEOUT_MS);
   try {
-    const result = await fetch(modelConfig.endpoint, {
-      method: 'POST',
-      signal: controller.signal,
-      redirect: 'manual',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${modelConfig.apiKey}`
-      },
-      body: JSON.stringify({
-        model: modelConfig.model,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a careful novel writing assistant. Reply in the project language. Keep output practical and directly usable.'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        temperature: modelConfig.temperature,
-        max_tokens: modelConfig.maxTokens
-      })
-    });
+    const result = await requestModelEndpoint(modelConfig.endpoint, {
+      model: modelConfig.model,
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a careful novel writing assistant. Reply in the project language. Keep output practical and directly usable.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: modelConfig.temperature,
+      max_tokens: modelConfig.maxTokens
+    }, {
+      Authorization: `Bearer ${modelConfig.apiKey}`
+    }, controller.signal);
     const text = await result.text();
     const json = parseModelJson(text, result.ok);
     if (!result.ok) {
@@ -598,6 +594,46 @@ async function callModel(task, project, payload, config) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function requestModelEndpoint(endpoint, payload, headers = {}, signal) {
+  const url = new URL(endpoint);
+  const resolvedAddresses = await resolveModelAddresses(url);
+  const body = JSON.stringify(payload);
+  const request = url.protocol === 'https:' ? httpsRequest : httpRequest;
+  return await new Promise((resolve, reject) => {
+    const clientRequest = request(url, {
+      method: 'POST',
+      signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        ...headers
+      },
+      lookup: resolvedAddresses ? createCheckedModelLookup(resolvedAddresses) : undefined
+    }, (modelResponse) => {
+      const chunks = [];
+      let totalBytes = 0;
+      modelResponse.on('data', (chunk) => {
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        chunks.push(buffer);
+        totalBytes += buffer.length;
+      });
+      modelResponse.on('error', reject);
+      modelResponse.on('end', () => {
+        const text = Buffer.concat(chunks, totalBytes).toString('utf8');
+        const status = modelResponse.statusCode || 0;
+        resolve({
+          ok: status >= 200 && status < 300,
+          status,
+          statusText: modelResponse.statusMessage || '',
+          text: async () => text
+        });
+      });
+    });
+    clientRequest.on('error', reject);
+    clientRequest.end(body);
+  });
 }
 
 function normalizeModelConfig(config) {
@@ -639,6 +675,43 @@ function buildModelEndpoint(baseUrlValue) {
   return url.toString();
 }
 
+async function resolveModelAddresses(url) {
+  if (ALLOW_PRIVATE_MODEL_BASE_URLS) return null;
+  const hostname = normalizeHostname(url.hostname);
+  if (!hostname || isIP(hostname)) return null;
+  let addresses;
+  try {
+    addresses = await lookupDns(hostname, { all: true });
+  } catch (error) {
+    throw new Error(`Unable to resolve model base URL host: ${error.message || 'DNS lookup failed'}`);
+  }
+  if (!addresses.length) throw new Error('Unable to resolve model base URL host.');
+  const blockedAddress = addresses.find((entry) => isBlockedResolvedModelAddress(hostname, entry.address));
+  if (blockedAddress) {
+    throw new HttpError(400, MODEL_DNS_ERROR_MESSAGE);
+  }
+  return addresses.map((entry) => ({
+    address: entry.address,
+    family: entry.family
+  }));
+}
+
+function createCheckedModelLookup(addresses) {
+  return (_hostname, options, callback) => {
+    if (options?.all) {
+      callback(null, addresses);
+      return;
+    }
+    callback(null, addresses[0].address, addresses[0].family);
+  };
+}
+
+function isBlockedResolvedModelAddress(hostname, address) {
+  const normalizedAddress = normalizeHostname(address);
+  if (isLoopbackModelAddress(normalizedAddress)) return hostname !== 'localhost';
+  return isPrivateModelTarget(normalizedAddress);
+}
+
 function isPrivateModelTarget(hostname) {
   const normalized = normalizeHostname(hostname);
   if (!normalized || normalized === 'localhost') return false;
@@ -646,6 +719,18 @@ function isPrivateModelTarget(hostname) {
   if (ipVersion === 4) return isPrivateIpv4Target(normalized);
   if (ipVersion === 6) return isPrivateIpv6Target(normalized);
   return false;
+}
+
+function isLoopbackModelAddress(address) {
+  const normalized = normalizeHostname(address);
+  const ipVersion = isIP(normalized);
+  if (ipVersion === 4) return normalized.split('.')[0] === '127';
+  if (ipVersion !== 6) return false;
+  const parts = expandIpv6(normalized);
+  if (!parts) return false;
+  const mappedIpv4 = ipv4FromMappedIpv6(parts);
+  if (mappedIpv4) return isLoopbackModelAddress(mappedIpv4);
+  return parts.slice(0, 7).every((part) => part === 0) && parts[7] === 1;
 }
 
 function normalizeHostname(hostname) {

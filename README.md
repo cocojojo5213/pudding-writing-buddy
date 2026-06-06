@@ -25,7 +25,7 @@ The app works without an API key by using deterministic offline helpers. For rea
 
 The server does not persist API keys.
 
-For safety, model Base URLs cannot point directly at private, link-local, multicast, or cloud metadata IP addresses by default. Local gateways on `localhost` or `127.0.0.1` remain allowed. If you deliberately run a trusted model gateway on a LAN/Tailscale address, start the server with `ALLOW_PRIVATE_MODEL_BASE_URLS=1`.
+For safety, model Base URLs cannot point at or resolve to private, link-local, multicast, or cloud metadata IP addresses by default. Local gateways on `localhost` or `127.0.0.1` remain allowed. If you deliberately run a trusted model gateway on a LAN/Tailscale address, start the server with `ALLOW_PRIVATE_MODEL_BASE_URLS=1`.
 
 ## Features
 

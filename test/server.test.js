@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { lookup as lookupDns } from 'node:dns/promises';
 import { createServer, request as httpRequest } from 'node:http';
 import { mkdtemp, readFile, readdir, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -769,7 +770,7 @@ test('api normalizes model config before proxying requests', async () => {
 test('api rejects unsafe model base URLs before proxying', async () => {
   const app = await startApp();
   try {
-    for (const baseUrl of [
+    const unsafeBaseUrls = [
       'ftp://example.test/v1',
       'https://example.test/v1?key=value',
       'http://0.0.0.0/v1',
@@ -782,7 +783,12 @@ test('api rejects unsafe model base URLs before proxying', async () => {
       'http://224.0.0.1/v1',
       'http://[fd00::1]/v1',
       'http://[fe80::1]/v1'
-    ]) {
+    ];
+    if (await hostnameResolvesToLoopback('bad.localhost')) {
+      unsafeBaseUrls.push('http://bad.localhost/v1');
+    }
+
+    for (const baseUrl of unsafeBaseUrls) {
       const response = await requestJson(app.baseUrl, '/api/assist', {
         method: 'POST',
         body: JSON.stringify({
@@ -1147,6 +1153,15 @@ async function freePort() {
     server.close((error) => error ? reject(error) : resolve());
   });
   return port;
+}
+
+async function hostnameResolvesToLoopback(hostname) {
+  try {
+    const addresses = await lookupDns(hostname, { all: true });
+    return addresses.some((entry) => entry.address === '::1' || entry.address.startsWith('127.'));
+  } catch {
+    return false;
+  }
 }
 
 async function waitFor(predicate, timeoutMs, tick = () => {}) {
