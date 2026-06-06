@@ -2,7 +2,7 @@ import { lookup as lookupDns } from 'node:dns/promises';
 import { createServer, request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { isIP } from 'node:net';
-import { copyFile, mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, readdir, realpath, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -237,10 +237,15 @@ async function serveStatic(request, response) {
     return;
   }
   try {
-    const fileStat = await stat(resolved);
+    const realResolved = await realpath(resolved);
+    if (realResolved !== PUBLIC_DIR && !realResolved.startsWith(PUBLIC_DIR + path.sep)) {
+      sendPlainText(response, 403, 'Forbidden', method);
+      return;
+    }
+    const fileStat = await stat(realResolved);
     if (!fileStat.isFile()) throw new Error('Not a file');
-    const ext = path.extname(resolved);
-    const content = await readFile(resolved);
+    const ext = path.extname(realResolved);
+    const content = await readFile(realResolved);
     response.writeHead(200, { 'Content-Type': MIME_TYPES[ext] || 'application/octet-stream' });
     response.end(method === 'HEAD' ? undefined : content);
   } catch {
@@ -613,7 +618,7 @@ async function callModel(task, project, payload, config) {
     const text = await result.text();
     const json = parseModelJson(text, result.ok);
     if (!result.ok) {
-      const detail = json.error?.message || json.message || result.statusText || `HTTP ${result.status}`;
+      const detail = modelErrorDetail(json, result.statusText, result.status);
       throw new Error(`Model request failed: ${detail}`);
     }
     const content = extractModelText(json);
@@ -856,6 +861,9 @@ function ipv4FromTransitionIpv6(parts) {
     && parts.slice(2, 6).every((part) => part === 0);
   if (nat64WellKnown) return ipv4FromIpv6Words(parts[6], parts[7]);
   if (parts[0] === 0x2002) return ipv4FromIpv6Words(parts[1], parts[2]);
+  if (parts[0] === 0x2001 && parts[1] === 0x0000) {
+    return ipv4FromIpv6Words((~parts[6]) & 0xffff, (~parts[7]) & 0xffff);
+  }
   return '';
 }
 
@@ -935,6 +943,13 @@ function parseModelJson(text, requestOk) {
     }
     return { message: text.slice(0, 500) };
   }
+}
+
+function modelErrorDetail(json, statusText, status) {
+  if (typeof json.error?.message === 'string' && json.error.message.trim()) return json.error.message;
+  if (typeof json.error === 'string' && json.error.trim()) return json.error;
+  if (typeof json.message === 'string' && json.message.trim()) return json.message;
+  return statusText || `HTTP ${status}`;
 }
 
 function allowedApiMethods(pathname) {

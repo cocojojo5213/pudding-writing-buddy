@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { lookup as lookupDns } from 'node:dns/promises';
 import { createServer, request as httpRequest } from 'node:http';
-import { chmod, mkdtemp, readFile, readdir, stat, unlink, utimes, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, readdir, rm, stat, symlink, unlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -575,6 +575,26 @@ test('static server handles malformed paths, methods, HEAD, and Host safely', as
   }
 });
 
+test('static server rejects symlink escapes outside public', async () => {
+  const app = await startApp();
+  const targetDir = await mkdtemp(path.join(tmpdir(), 'novel-copilot-static-'));
+  const targetFile = path.join(targetDir, 'escape.txt');
+  const linkName = `symlink-escape-${process.pid}-${Date.now()}.txt`;
+  const linkPath = path.join(APP_ROOT, 'public', linkName);
+  try {
+    await writeFile(targetFile, 'outside public', 'utf8');
+    await symlink(targetFile, linkPath);
+
+    const response = await rawRequest(app.baseUrl, `/${linkName}`, { method: 'GET' });
+    assert.equal(response.status, 403);
+    assert.equal(response.text, 'Forbidden');
+  } finally {
+    await unlink(linkPath).catch(() => {});
+    await rm(targetDir, { recursive: true, force: true }).catch(() => {});
+    await app.stop();
+  }
+});
+
 test('static server returns a clean 404 when a file cannot be read', async () => {
   const app = await startApp();
   const unreadableFilename = `unreadable-${process.pid}-${Date.now()}.txt`;
@@ -864,6 +884,32 @@ test('api reports non-json successful model responses clearly', async () => {
   }
 });
 
+test('api surfaces model error messages from failed JSON responses', async () => {
+  const model = await startMockModel((_request, response) => {
+    response.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' });
+    response.end(JSON.stringify({ error: 'bad api key' }));
+  });
+  const app = await startApp();
+  try {
+    const response = await requestJson(app.baseUrl, '/api/assist', {
+      method: 'POST',
+      body: JSON.stringify({
+        task: 'plan',
+        modelConfig: {
+          baseUrl: model.baseUrl,
+          apiKey: 'test-key',
+          model: 'test-model'
+        }
+      })
+    });
+    assert.equal(response.status, 500);
+    assert.match(response.body.error, /bad api key/);
+  } finally {
+    await app.stop();
+    await model.stop();
+  }
+});
+
 test('api rejects oversized model responses before buffering them fully', async () => {
   const model = await startMockModel((_request, response) => {
     response.on('error', () => {});
@@ -1012,6 +1058,7 @@ test('api rejects unsafe model base URLs before proxying', async () => {
       'http://[::169.254.169.254]/latest',
       'http://[64:ff9b::169.254.169.254]/latest',
       'http://[2002:a9fe:a9fe::1]/latest',
+      'http://[2001:0000:0000:0000:0000:0000:f5ff:fffe]/latest',
       'http://[fd00::1]/v1',
       'http://[fe80::1]/v1'
     ];
