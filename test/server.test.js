@@ -746,6 +746,53 @@ test('api settlement uses saved chapter text when client sends only a chapter id
   }
 });
 
+test('api settlement falls back to legacy text when incoming body shape is malformed', async () => {
+  const app = await startApp();
+  try {
+    const project = (await requestJson(app.baseUrl, '/api/project')).body;
+    project.chapters = [{
+      id: 'malformed-incoming-body-settle',
+      title: '第1章 畸形正文传入',
+      body: '',
+      plan: '',
+      audit: '',
+      summary: '',
+      status: 'draft',
+      createdAt: '',
+      settledAt: ''
+    }];
+    const savedProject = await requestJson(app.baseUrl, '/api/project', {
+      method: 'POST',
+      body: JSON.stringify({
+        project,
+        expectedVersionToken: project.versionToken
+      })
+    });
+    assert.equal(savedProject.status, 200);
+
+    const legacyText = '林澈把未来日期的医院缴费单贴在窗上。许闻说：“它在等你确认代价。”';
+    const settled = await requestJson(app.baseUrl, '/api/settle', {
+      method: 'POST',
+      body: JSON.stringify({
+        project: savedProject.body,
+        expectedVersionToken: savedProject.body.versionToken,
+        chapter: {
+          id: 'malformed-incoming-body-settle',
+          body: { text: 'bad body shape' },
+          text: legacyText
+        }
+      })
+    });
+
+    assert.equal(settled.status, 200);
+    assert.equal(settled.body.project.chapters[0].body, legacyText);
+    assert.match(settled.body.project.chapters[0].summary, /医院缴费单/);
+    assert.doesNotMatch(settled.body.project.chapters[0].summary, /\[object Object\]/);
+  } finally {
+    await app.stop();
+  }
+});
+
 test('api settlement uses the current disk project as its write base', async () => {
   const app = await startApp();
   try {
@@ -1077,6 +1124,40 @@ test('api normalizes model config before proxying requests', async () => {
 
     assert.equal(fullEndpointResponse.status, 200);
     assert.equal(proxiedRequests[3].url, '/v1/chat/completions');
+  } finally {
+    await app.stop();
+    await model.stop();
+  }
+});
+
+test('api ignores malformed model config text fields instead of proxying stringified objects', async () => {
+  let proxiedRequests = 0;
+  const model = await startMockModel((_request, response) => {
+    proxiedRequests += 1;
+    response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    response.end(JSON.stringify({
+      choices: [{ message: { content: 'should not proxy malformed config' } }]
+    }));
+  });
+  const app = await startApp();
+  try {
+    for (const modelConfig of [
+      { baseUrl: model.baseUrl, apiKey: { value: 'test-key' }, model: 'test-model' },
+      { baseUrl: model.baseUrl, apiKey: 'test-key', model: ['test-model'] },
+      { baseUrl: { href: model.baseUrl }, apiKey: 'test-key', model: 'test-model' }
+    ]) {
+      const response = await requestJson(app.baseUrl, '/api/assist', {
+        method: 'POST',
+        body: JSON.stringify({
+          task: 'plan',
+          modelConfig
+        })
+      });
+
+      assert.equal(response.status, 200);
+      assert.match(response.body.output, /章节目标/);
+    }
+    assert.equal(proxiedRequests, 0);
   } finally {
     await app.stop();
     await model.stop();

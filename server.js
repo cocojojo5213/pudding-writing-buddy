@@ -589,9 +589,9 @@ function sendPlainText(response, status, text, method = 'GET', headers = {}) {
 
 function isUsableModelConfig(config) {
   return Boolean(
-    toTrimmedString(config?.baseUrl)
-    && toTrimmedString(config?.apiKey)
-    && toTrimmedString(config?.model)
+    modelConfigText(config?.baseUrl)
+    && modelConfigText(config?.apiKey)
+    && modelConfigText(config?.model)
   );
 }
 
@@ -697,9 +697,9 @@ async function requestModelEndpoint(endpoint, payload, headers = {}, signal) {
 
 function normalizeModelConfig(config) {
   return {
-    endpoint: buildModelEndpoint(toTrimmedString(config?.baseUrl)),
-    apiKey: toTrimmedString(config?.apiKey),
-    model: toTrimmedString(config?.model),
+    endpoint: buildModelEndpoint(modelConfigText(config?.baseUrl)),
+    apiKey: modelConfigText(config?.apiKey),
+    model: modelConfigText(config?.model),
     temperature: boundedNumber(config?.temperature, {
       defaultValue: DEFAULT_MODEL_TEMPERATURE,
       min: MIN_MODEL_TEMPERATURE,
@@ -883,11 +883,21 @@ function toTrimmedString(value) {
   return typeof value === 'string' ? value.trim() : String(value ?? '').trim();
 }
 
+function modelConfigText(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
 function firstNonBlankText(...values) {
   for (const value of values) {
-    const text = typeof value === 'string' ? value : String(value ?? '');
+    const text = textScalar(value);
     if (text.trim()) return text;
   }
+  return '';
+}
+
+function textScalar(value) {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
   return '';
 }
 
