@@ -63,6 +63,8 @@ function bindTabs() {
 }
 
 function bindStaticControls() {
+  window.addEventListener('beforeunload', warnBeforeLeavingWithUnsavedChanges);
+
   $('#save-project').addEventListener('click', () => guardAction(saveProject));
   $('#save-model').addEventListener('click', saveModelConfig);
   $('#refresh-metrics').addEventListener('click', () => guardAction(() => refreshMetrics(true)));
@@ -729,6 +731,16 @@ function cancelPendingSave() {
   if (!state.saveTimer) return;
   clearTimeout(state.saveTimer);
   state.saveTimer = null;
+}
+
+function hasPendingProjectSave() {
+  return state.ready && (Boolean(state.saveTimer) || Boolean(state.saveInFlight) || state.revision !== state.savedRevision);
+}
+
+function warnBeforeLeavingWithUnsavedChanges(event) {
+  if (!hasPendingProjectSave()) return;
+  event.preventDefault();
+  event.returnValue = '';
 }
 
 function setSaveState(text, tone = 'ok') {
