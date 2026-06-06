@@ -108,7 +108,7 @@ async function handleApi(request, response) {
 
   if (request.method === 'POST' && url.pathname === '/api/project') {
     const body = await readJson(request);
-    const projectInput = body.project || body;
+    const projectInput = readProjectSavePayload(body);
     const saved = await saveProjectIfVersion(projectInput, {
       expectedVersionToken: body.expectedVersionToken ?? projectInput.versionToken,
       expectedUpdatedAt: body.expectedUpdatedAt || projectInput.updatedAt
@@ -294,6 +294,19 @@ function chapterInputForSettlement(project, chapterInput) {
     createdAt: firstNonBlankText(savedChapter.createdAt, incoming.createdAt),
     settledAt: firstNonBlankText(savedChapter.settledAt, incoming.settledAt)
   };
+}
+
+function readProjectSavePayload(body) {
+  if (Object.hasOwn(body, 'project')) {
+    if (!isPlainObject(body.project)) {
+      throw new HttpError(400, 'Project payload must be an object.');
+    }
+    return body.project;
+  }
+  if (Object.hasOwn(body, 'expectedVersionToken') || Object.hasOwn(body, 'expectedUpdatedAt')) {
+    throw new HttpError(400, 'Project payload is required when sending version metadata.');
+  }
+  return body;
 }
 
 async function readProjectIfPresent() {

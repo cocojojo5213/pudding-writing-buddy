@@ -115,6 +115,46 @@ test('api rejects blind writes when a project version exists', async () => {
   }
 });
 
+test('api rejects project save metadata without a project payload', async () => {
+  const app = await startApp();
+  try {
+    const project = (await requestJson(app.baseUrl, '/api/project')).body;
+    const savedProject = await requestJson(app.baseUrl, '/api/project', {
+      method: 'POST',
+      body: JSON.stringify({
+        project: {
+          ...project,
+          title: 'Payload Boundary Title'
+        },
+        expectedVersionToken: project.versionToken
+      })
+    });
+    assert.equal(savedProject.status, 200);
+
+    const missingProject = await requestJson(app.baseUrl, '/api/project', {
+      method: 'POST',
+      body: JSON.stringify({ expectedVersionToken: savedProject.body.versionToken })
+    });
+    assert.equal(missingProject.status, 400);
+    assert.match(missingProject.body.error, /Project payload is required/);
+
+    const wrongShape = await requestJson(app.baseUrl, '/api/project', {
+      method: 'POST',
+      body: JSON.stringify({
+        project: 'not an object',
+        expectedVersionToken: savedProject.body.versionToken
+      })
+    });
+    assert.equal(wrongShape.status, 400);
+    assert.match(wrongShape.body.error, /Project payload must be an object/);
+
+    const saved = JSON.parse(await readFile(path.join(app.dataDir, 'project.json'), 'utf8'));
+    assert.equal(saved.title, 'Payload Boundary Title');
+  } finally {
+    await app.stop();
+  }
+});
+
 test('static server handles malformed paths, methods, HEAD, and Host safely', async () => {
   const app = await startApp();
   try {
