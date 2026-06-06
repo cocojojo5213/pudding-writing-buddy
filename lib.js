@@ -678,21 +678,27 @@ export function formatSettlement(settlement) {
   return [
     '# Chapter Settlement',
     '',
-    `Chapter: ${settlement.title}`,
-    `Summary: ${settlement.summary || '未提取到摘要'}`,
+    `Chapter: ${formatInlineText(settlement.title, '未命名章节')}`,
+    `Summary: ${formatInlineText(settlement.summary, '未提取到摘要')}`,
     '',
     '## Timeline',
-    `- ${settlement.timelineEvent.event}`,
-    `  Consequence: ${settlement.timelineEvent.consequence}`,
+    `- ${formatInlineText(settlement.timelineEvent?.event, '未生成')}`,
+    `  Consequence: ${formatInlineText(settlement.timelineEvent?.consequence, '未生成')}`,
     '',
     '## Character Updates',
-    ...(settlement.characterUpdates.length ? settlement.characterUpdates.map((item) => `- ${item.name}: ${item.knowledge}`) : ['- 未识别到人物变化']),
+    ...(settlement.characterUpdates?.length
+      ? settlement.characterUpdates.map((item) => `- ${formatInlineText(item.name, '未命名')}: ${formatInlineText(item.knowledge, '未记录')}`)
+      : ['- 未识别到人物变化']),
     '',
     '## Hook Updates',
-    ...(settlement.hookUpdates.length ? settlement.hookUpdates.map((item) => `- ${item.text}: ${item.from} -> ${item.to}`) : ['- 未识别到伏笔推进']),
+    ...(settlement.hookUpdates?.length
+      ? settlement.hookUpdates.map((item) => `- ${formatInlineText(item.text, '未命名伏笔')}: ${formatInlineText(item.from, '未知')} -> ${formatInlineText(item.to, '未知')}`)
+      : ['- 未识别到伏笔推进']),
     '',
     '## Resource Updates',
-    ...(settlement.resourceUpdates.length ? settlement.resourceUpdates.map((item) => `- ${item.item}: ${item.note}`) : ['- 未识别到资源变化'])
+    ...(settlement.resourceUpdates?.length
+      ? settlement.resourceUpdates.map((item) => `- ${formatInlineText(item.item, '未命名资源')}: ${formatInlineText(item.note, '未记录')}`)
+      : ['- 未识别到资源变化'])
   ].join('\n');
 }
 

@@ -11,6 +11,7 @@ import {
   createDefaultProject,
   deriveProjectMetrics,
   exportMarkdown,
+  formatSettlement,
   normalizeProject,
   offlineAssist,
   offlineAudit
@@ -498,6 +499,35 @@ test('settlement appends truth ledger notes instead of overwriting old state', (
   assert.match(settled.hooks[0].note, /已在第2章 状态追加触碰/);
   assert.match(settled.resources[0].note, /旧资源备注：缴费单原件在林澈口袋。/);
   assert.match(settled.resources[0].note, /在第2章 状态追加出现或被使用/);
+});
+
+test('settlement report keeps generated fields on one markdown line', () => {
+  const report = formatSettlement({
+    title: '第1章\n## Fake Chapter',
+    summary: '摘要\n- fake summary item',
+    timelineEvent: {
+      event: '事件\n## Fake Timeline',
+      consequence: '后果\n- fake consequence'
+    },
+    characterUpdates: [{
+      name: '林澈\n## Fake Character',
+      knowledge: '知道缴费单\n- fake knowledge'
+    }],
+    hookUpdates: [{
+      text: '缴费单\n## Fake Hook',
+      from: 'open\n## Fake From',
+      to: 'progressing\n## Fake To'
+    }],
+    resourceUpdates: [{
+      item: '缴费单\n## Fake Resource',
+      note: '在桌上\n- fake resource'
+    }]
+  });
+
+  assert.doesNotMatch(report, /^## Fake/m);
+  assert.doesNotMatch(report, /^- fake/m);
+  assert.match(report, /^Chapter: 第1章 ## Fake Chapter$/m);
+  assert.match(report, /^- 林澈 ## Fake Character: 知道缴费单 - fake knowledge$/m);
 });
 
 test('project metrics and mixed-language length counting are stable', () => {

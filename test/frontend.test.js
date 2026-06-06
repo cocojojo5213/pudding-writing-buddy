@@ -105,6 +105,77 @@ test('markdown export clicks a mounted link and revokes the object URL after cle
   await waitFor(() => revokedUrls.includes('blob:pudding-export'));
 });
 
+test('settlement output keeps API-provided fields on one markdown line', async () => {
+  const dom = createDomHarness();
+  const project = {
+    ...createDefaultProject(),
+    chapters: [{
+      id: 'chapter-with-settlement-output',
+      title: '第1章',
+      body: '林澈把未来日期的医院缴费单放在桌上。',
+      plan: '',
+      audit: '',
+      summary: '',
+      status: 'draft',
+      createdAt: '',
+      settledAt: ''
+    }]
+  };
+
+  globalThis.document = dom.document;
+  globalThis.window = dom.window;
+  globalThis.localStorage = createStorage();
+  globalThis.fetch = async (requestPath, options = {}) => {
+    if (requestPath === '/api/project') return jsonResponse(project);
+    if (requestPath === '/api/settle' && options.method === 'POST') {
+      return jsonResponse({
+        project: {
+          ...project,
+          chapters: [{
+            ...project.chapters[0],
+            summary: '摘要',
+            settledAt: '2026-06-07T00:00:00.000Z'
+          }]
+        },
+        settlement: {
+          title: '第1章\n## Fake Chapter',
+          summary: '摘要\n- fake summary item',
+          timelineEvent: {
+            event: '事件\n## Fake Timeline',
+            consequence: '后果\n- fake consequence'
+          },
+          characterUpdates: [{
+            name: '林澈\n## Fake Character',
+            knowledge: '知道缴费单\n- fake knowledge'
+          }],
+          hookUpdates: [{
+            text: '缴费单\n## Fake Hook',
+            from: 'open\n## Fake From',
+            to: 'progressing\n## Fake To'
+          }],
+          resourceUpdates: [{
+            item: '缴费单\n## Fake Resource',
+            note: '在桌上\n- fake resource'
+          }]
+        }
+      });
+    }
+    throw new Error(`Unexpected fetch: ${requestPath}`);
+  };
+
+  const moduleUrl = pathToFileURL(path.join(APP_ROOT, 'public/app.js'));
+  await import(`${moduleUrl.href}?frontend-test=${Date.now()}`);
+  await waitFor(() => dom.byId('save-state').textContent === 'Ready');
+
+  dom.byId('settle').click();
+
+  await waitFor(() => dom.byId('output').value.includes('Chapter Settlement'));
+  assert.doesNotMatch(dom.byId('output').value, /^## Fake/m);
+  assert.doesNotMatch(dom.byId('output').value, /^- fake/m);
+  assert.match(dom.byId('output').value, /^Chapter: 第1章 ## Fake Chapter$/m);
+  assert.match(dom.byId('output').value, /^- 林澈 ## Fake Character: 知道缴费单 - fake knowledge$/m);
+});
+
 function jsonResponse(body, status = 200) {
   return {
     ok: status >= 200 && status < 300,

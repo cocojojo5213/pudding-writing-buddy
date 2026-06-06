@@ -876,22 +876,35 @@ function formatSettlement(settlement) {
   return [
     '# Chapter Settlement',
     '',
-    `Chapter: ${settlement.title}`,
-    `Summary: ${settlement.summary || '未提取到摘要'}`,
+    `Chapter: ${formatReportLine(settlement.title, '未命名章节')}`,
+    `Summary: ${formatReportLine(settlement.summary, '未提取到摘要')}`,
     '',
     '## Timeline',
-    `- ${settlement.timelineEvent?.event || '未生成'}`,
-    `  Consequence: ${settlement.timelineEvent?.consequence || '未生成'}`,
+    `- ${formatReportLine(settlement.timelineEvent?.event, '未生成')}`,
+    `  Consequence: ${formatReportLine(settlement.timelineEvent?.consequence, '未生成')}`,
     '',
     '## Character Updates',
-    ...(settlement.characterUpdates?.length ? settlement.characterUpdates.map((item) => `- ${item.name}: ${item.knowledge}`) : ['- 未识别到人物变化']),
+    ...(settlement.characterUpdates?.length
+      ? settlement.characterUpdates.map((item) => `- ${formatReportLine(item.name, '未命名')}: ${formatReportLine(item.knowledge, '未记录')}`)
+      : ['- 未识别到人物变化']),
     '',
     '## Hook Updates',
-    ...(settlement.hookUpdates?.length ? settlement.hookUpdates.map((item) => `- ${item.text}: ${item.from} -> ${item.to}`) : ['- 未识别到伏笔推进']),
+    ...(settlement.hookUpdates?.length
+      ? settlement.hookUpdates.map((item) => `- ${formatReportLine(item.text, '未命名伏笔')}: ${formatReportLine(item.from, '未知')} -> ${formatReportLine(item.to, '未知')}`)
+      : ['- 未识别到伏笔推进']),
     '',
     '## Resource Updates',
-    ...(settlement.resourceUpdates?.length ? settlement.resourceUpdates.map((item) => `- ${item.item}: ${item.note}`) : ['- 未识别到资源变化'])
+    ...(settlement.resourceUpdates?.length
+      ? settlement.resourceUpdates.map((item) => `- ${formatReportLine(item.item, '未命名资源')}: ${formatReportLine(item.note, '未记录')}`)
+      : ['- 未识别到资源变化'])
   ].join('\n');
+}
+
+function formatReportLine(value, fallback = '') {
+  return String(value ?? '')
+    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim() || fallback;
 }
 
 function createId() {
