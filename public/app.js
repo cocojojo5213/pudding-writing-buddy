@@ -514,7 +514,11 @@ async function exportMarkdown() {
 async function resetProject() {
   if (!confirm('Reset the local project?')) return;
   cancelPendingSave();
-  await waitForSave();
+  try {
+    await waitForSave();
+  } catch {
+    // Reset intentionally discards local dirty revisions; the server version check still protects disk state.
+  }
   state.project = await api('/api/reset', {
     method: 'POST',
     body: JSON.stringify({

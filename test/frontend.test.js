@@ -350,6 +350,77 @@ test('flushSave retries dirty revisions after an in-flight autosave failure', as
   }
 });
 
+test('reset discards dirty revisions after an in-flight autosave failure', async () => {
+  const dom = createDomHarness();
+  const originalConsoleError = console.error;
+  const originalConfirm = globalThis.confirm;
+  let project = {
+    ...createDefaultProject(),
+    title: 'Reset Source',
+    versionToken: 'reset-base-token',
+    updatedAt: '2026-06-07T00:00:00.000Z'
+  };
+  const savePayloads = [];
+  const resetPayloads = [];
+  const events = [];
+  let releaseFirstSave;
+
+  try {
+    console.error = () => {};
+    globalThis.confirm = () => true;
+    globalThis.document = dom.document;
+    globalThis.window = dom.window;
+    globalThis.localStorage = createStorage();
+    globalThis.fetch = async (requestPath, options = {}) => {
+      if (requestPath === '/api/project' && options.method === 'POST') {
+        const payload = JSON.parse(options.body);
+        savePayloads.push(payload);
+        events.push('save');
+        return await new Promise((resolve) => {
+          releaseFirstSave = () => resolve(jsonResponse({ error: 'Autosave failed before reset' }, 500));
+        });
+      }
+      if (requestPath === '/api/reset' && options.method === 'POST') {
+        const payload = JSON.parse(options.body);
+        resetPayloads.push(payload);
+        events.push('reset');
+        assert.equal(payload.expectedVersionToken, 'reset-base-token');
+        assert.equal(payload.expectedUpdatedAt, '2026-06-07T00:00:00.000Z');
+        project = {
+          ...createDefaultProject(),
+          title: 'Untitled Novel',
+          chapters: [],
+          versionToken: 'reset-new-token',
+          updatedAt: '2026-06-07T00:00:01.000Z'
+        };
+        return jsonResponse(project);
+      }
+      if (requestPath === '/api/project') return jsonResponse(project);
+      throw new Error(`Unexpected fetch: ${requestPath}`);
+    };
+
+    const moduleUrl = pathToFileURL(path.join(APP_ROOT, 'public/app.js'));
+    await import(`${moduleUrl.href}?frontend-test=${Date.now()}`);
+    await waitFor(() => dom.byId('save-state').textContent === 'Ready');
+
+    dom.byId('title').value = 'Dirty Title Before Reset';
+    dom.byId('title').dispatchEvent({ type: 'input' });
+    await waitFor(() => savePayloads.length === 1 && releaseFirstSave, 2000);
+
+    dom.byId('reset-project').click();
+    releaseFirstSave();
+
+    await waitFor(() => resetPayloads.length === 1 && dom.byId('save-state').textContent === 'Reset', 2000);
+    assert.deepEqual(events, ['save', 'reset']);
+    assert.equal(savePayloads[0].project.title, 'Dirty Title Before Reset');
+    assert.equal(dom.byId('title').value, 'Untitled Novel');
+  } finally {
+    console.error = originalConsoleError;
+    if (originalConfirm) globalThis.confirm = originalConfirm;
+    else delete globalThis.confirm;
+  }
+});
+
 test('add actions cannot mutate the project while a guarded action is running', async () => {
   const dom = createDomHarness();
   let project = {
