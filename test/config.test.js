@@ -6,11 +6,18 @@ test('integer server settings fall back when env values are invalid', () => {
   const options = { defaultValue: 5179, min: 1, max: 65535 };
 
   assert.equal(parseIntegerSetting(undefined, options), 5179);
+  assert.equal(parseIntegerSetting(null, options), 5179);
+  assert.equal(parseIntegerSetting(true, options), 5179);
+  assert.equal(parseIntegerSetting({ value: 5180 }, options), 5179);
   assert.equal(parseIntegerSetting('', options), 5179);
   assert.equal(parseIntegerSetting('abc', options), 5179);
   assert.equal(parseIntegerSetting('12.5', options), 5179);
+  assert.equal(parseIntegerSetting('42.0', options), 5179);
+  assert.equal(parseIntegerSetting('0x10', options), 5179);
+  assert.equal(parseIntegerSetting('1e2', options), 5179);
   assert.equal(parseIntegerSetting('0', options), 5179);
   assert.equal(parseIntegerSetting('65536', options), 5179);
+  assert.equal(parseIntegerSetting('010', options), 10);
   assert.equal(parseIntegerSetting(' 5180 ', options), 5180);
 });
 

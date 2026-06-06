@@ -946,6 +946,12 @@ function parseModelJson(text, requestOk) {
 }
 
 function modelErrorDetail(json, statusText, status) {
+  if (typeof json === 'string' && json.trim()) return json;
+  if (typeof json === 'number' || typeof json === 'boolean') return String(json);
+  if (Array.isArray(json)) {
+    const detail = json.map((item) => modelErrorDetail(item, '', status)).filter(Boolean).join('; ');
+    if (detail) return detail;
+  }
   if (typeof json.error?.message === 'string' && json.error.message.trim()) return json.error.message;
   if (typeof json.error === 'string' && json.error.trim()) return json.error;
   if (typeof json.message === 'string' && json.message.trim()) return json.message;

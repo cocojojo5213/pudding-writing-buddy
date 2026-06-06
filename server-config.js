@@ -2,6 +2,8 @@ export function parseIntegerSetting(value, { defaultValue, min = Number.MIN_SAFE
   const fallback = normalizeInteger(defaultValue, min, max, defaultValue);
   const raw = typeof value === 'string' ? value.trim() : value;
   if (raw === undefined || raw === null || raw === '') return fallback;
+  if (typeof raw === 'string' && !/^[+-]?\d+$/.test(raw)) return fallback;
+  if (typeof raw !== 'string' && typeof raw !== 'number') return fallback;
   return normalizeInteger(Number(raw), min, max, fallback);
 }
 

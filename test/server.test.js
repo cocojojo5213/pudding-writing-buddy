@@ -885,25 +885,49 @@ test('api reports non-json successful model responses clearly', async () => {
 });
 
 test('api surfaces model error messages from failed JSON responses', async () => {
-  const model = await startMockModel((_request, response) => {
+  const model = await startMockModel(async (request, response) => {
+    const body = await readRequestJson(request);
     response.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' });
-    response.end(JSON.stringify({ error: 'bad api key' }));
+    if (body.model === 'string-error') {
+      response.end(JSON.stringify('bad api key'));
+      return;
+    }
+    if (body.model === 'number-error') {
+      response.end(JSON.stringify(429));
+      return;
+    }
+    if (body.model === 'boolean-error') {
+      response.end(JSON.stringify(false));
+      return;
+    }
+    response.end(JSON.stringify([
+      'outer error',
+      { error: { message: 'nested message' } },
+      42
+    ]));
   });
   const app = await startApp();
   try {
-    const response = await requestJson(app.baseUrl, '/api/assist', {
-      method: 'POST',
-      body: JSON.stringify({
-        task: 'plan',
-        modelConfig: {
-          baseUrl: model.baseUrl,
-          apiKey: 'test-key',
-          model: 'test-model'
-        }
-      })
-    });
-    assert.equal(response.status, 500);
-    assert.match(response.body.error, /bad api key/);
+    for (const [modelName, expected] of [
+      ['string-error', /bad api key/],
+      ['number-error', /429/],
+      ['boolean-error', /false/],
+      ['array-error', /outer error.*nested message.*42/s]
+    ]) {
+      const response = await requestJson(app.baseUrl, '/api/assist', {
+        method: 'POST',
+        body: JSON.stringify({
+          task: 'plan',
+          modelConfig: {
+            baseUrl: model.baseUrl,
+            apiKey: 'test-key',
+            model: modelName
+          }
+        })
+      });
+      assert.equal(response.status, 500);
+      assert.match(response.body.error, expected);
+    }
   } finally {
     await app.stop();
     await model.stop();
