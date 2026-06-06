@@ -121,10 +121,10 @@ async function handleApi(request, response) {
   if (request.method === 'POST' && url.pathname === '/api/assist') {
     const body = await readJson(request);
     const project = normalizeProject(await readOptionalProjectPayload(body));
-    const payload = body.payload || {};
+    const payload = readAssistPayload(body);
     const task = String(body.task || 'brainstorm');
     if (!KNOWN_TASKS.has(task)) throw new HttpError(400, `Unknown assist task: ${task}`);
-    const modelConfig = body.modelConfig || {};
+    const modelConfig = readModelConfigPayload(body);
     const output = task === 'style' || task === 'context' || task === 'settle' || !isUsableModelConfig(modelConfig)
       ? offlineAssist(task, project, payload)
       : await callModel(task, project, payload, modelConfig);
@@ -330,6 +330,22 @@ function readChapterSettlementPayload(body) {
     throw new HttpError(400, 'Chapter payload must be an object.');
   }
   return body.chapter;
+}
+
+function readAssistPayload(body) {
+  if (!Object.hasOwn(body, 'payload')) return {};
+  if (!isPlainObject(body.payload)) {
+    throw new HttpError(400, 'Assist payload must be an object.');
+  }
+  return body.payload;
+}
+
+function readModelConfigPayload(body) {
+  if (!Object.hasOwn(body, 'modelConfig')) return {};
+  if (!isPlainObject(body.modelConfig)) {
+    throw new HttpError(400, 'Model config must be an object.');
+  }
+  return body.modelConfig;
 }
 
 function assertCompleteProjectPayload(project) {

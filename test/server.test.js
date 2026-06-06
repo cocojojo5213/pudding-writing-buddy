@@ -196,6 +196,33 @@ test('api rejects non-object explicit project payloads on project-reading routes
   }
 });
 
+test('api rejects malformed assist payload and model config shapes', async () => {
+  const app = await startApp();
+  try {
+    for (const payload of ['not an object', [], null]) {
+      const response = await requestJson(app.baseUrl, '/api/assist', {
+        method: 'POST',
+        body: JSON.stringify({ task: 'plan', payload })
+      });
+
+      assert.equal(response.status, 400);
+      assert.match(response.body.error, /Assist payload must be an object/);
+    }
+
+    for (const modelConfig of ['not an object', [], null]) {
+      const response = await requestJson(app.baseUrl, '/api/assist', {
+        method: 'POST',
+        body: JSON.stringify({ task: 'plan', payload: {}, modelConfig })
+      });
+
+      assert.equal(response.status, 400);
+      assert.match(response.body.error, /Model config must be an object/);
+    }
+  } finally {
+    await app.stop();
+  }
+});
+
 test('static server handles malformed paths, methods, HEAD, and Host safely', async () => {
   const app = await startApp();
   try {
