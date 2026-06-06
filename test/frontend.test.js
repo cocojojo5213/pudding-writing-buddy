@@ -43,6 +43,66 @@ test('typing into an empty chapter editor preserves the first edit on save', asy
   assert.equal(savedPayloads[0].project.chapters[0].body, '第一句不能被创建章节时的重绘抹掉。');
 });
 
+test('invalid target words are shown locally and not autosaved', async () => {
+  const dom = createDomHarness();
+  const originalConsoleError = console.error;
+  const savedPayloads = [];
+  let project = createDefaultProject();
+
+  try {
+    console.error = () => {};
+    globalThis.document = dom.document;
+    globalThis.window = dom.window;
+    globalThis.localStorage = createStorage();
+    globalThis.fetch = async (requestPath, options = {}) => {
+      if (requestPath === '/api/project' && options.method === 'POST') {
+        const payload = JSON.parse(options.body);
+        savedPayloads.push(payload);
+        project = {
+          ...payload.project,
+          versionToken: `target-saved-${savedPayloads.length}`,
+          updatedAt: `2026-06-07T00:01:0${savedPayloads.length}.000Z`
+        };
+        return jsonResponse(project);
+      }
+      if (requestPath === '/api/project') return jsonResponse(project);
+      throw new Error(`Unexpected fetch: ${requestPath}`);
+    };
+
+    const moduleUrl = pathToFileURL(path.join(APP_ROOT, 'public/app.js'));
+    await import(`${moduleUrl.href}?frontend-test=${Date.now()}`);
+    await waitFor(() => dom.byId('save-state').textContent === 'Ready');
+
+    dom.byId('targetWords').value = '25000';
+    dom.byId('targetWords').dispatchEvent({ type: 'input' });
+    await new Promise((resolve) => setTimeout(resolve, 850));
+
+    assert.equal(savedPayloads.length, 0);
+    assert.equal(dom.byId('save-state').textContent, 'Target error');
+
+    dom.byId('save-project').click();
+    await waitFor(() => dom.byId('output').value.includes('Target words must be between 300 and 20000.'));
+
+    assert.equal(savedPayloads.length, 0);
+
+    dom.byId('title').value = 'Title While Target Invalid';
+    dom.byId('title').dispatchEvent({ type: 'input' });
+    await new Promise((resolve) => setTimeout(resolve, 850));
+
+    assert.equal(savedPayloads.length, 0);
+    assert.equal(dom.byId('save-state').textContent, 'Target error');
+
+    dom.byId('targetWords').value = '20000';
+    dom.byId('targetWords').dispatchEvent({ type: 'input' });
+
+    await waitFor(() => savedPayloads.length === 1 && dom.byId('save-state').textContent === 'Saved', 2000);
+    assert.equal(savedPayloads[0].project.targetWords, 20000);
+    assert.equal(savedPayloads[0].project.title, 'Title While Target Invalid');
+  } finally {
+    console.error = originalConsoleError;
+  }
+});
+
 test('markdown export clicks a mounted link and revokes the object URL after cleanup', async () => {
   const clickedLinks = [];
   const dom = createDomHarness({

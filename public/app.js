@@ -31,6 +31,9 @@ const projectFields = [
 ];
 
 const modelFields = ['baseUrl', 'model', 'apiKey', 'temperature', 'maxTokens'];
+const MIN_TARGET_WORDS = 300;
+const MAX_TARGET_WORDS = 20000;
+const TARGET_WORDS_ERROR_MESSAGE = `Target words must be between ${MIN_TARGET_WORDS} and ${MAX_TARGET_WORDS}.`;
 
 init();
 
@@ -91,7 +94,14 @@ function bindStaticControls() {
     const element = $(`#${field}`);
     bindValueListener(element, () => {
       if (!canMutateProject()) return;
-      state.project[field] = field === 'targetWords' ? Number(element.value) : element.value;
+      state.project[field] = readProjectFieldValue(field, element, false);
+      if (field === 'targetWords' && !isTargetWordsValue(element.value)) {
+        markDirty();
+        cancelPendingSave();
+        renderMetrics();
+        setSaveState('Target error', 'warn');
+        return;
+      }
       scheduleSave();
       renderMetrics();
     });
@@ -563,7 +573,7 @@ async function assist(task, payload) {
 function collectProjectInputs() {
   for (const field of projectFields) {
     const element = $(`#${field}`);
-    state.project[field] = field === 'targetWords' ? Number(element.value) : element.value;
+    state.project[field] = readProjectFieldValue(field, element);
   }
 }
 
@@ -734,7 +744,7 @@ function canMutateProject() {
 
 function showActionError(error, label = 'Error') {
   const conflict = error?.status === 409;
-  setSaveState(conflict ? 'Conflict' : label, 'warn');
+  setSaveState(conflict ? 'Conflict' : isTargetWordsError(error) ? 'Target error' : label, 'warn');
   $('#output').value = conflict
     ? `${error.message}\n\n当前浏览器里的项目版本已经落后。请先刷新页面或打开 Export 复制本地未保存内容，再决定如何合并。`
     : error instanceof Error ? error.message : String(error);
@@ -743,7 +753,7 @@ function showActionError(error, label = 'Error') {
 }
 
 function showBackgroundSaveError(error) {
-  setSaveState(error?.status === 409 ? 'Conflict' : 'Save error', 'warn');
+  setSaveState(error?.status === 409 ? 'Conflict' : isTargetWordsError(error) ? 'Target error' : 'Save error', 'warn');
   console.error(error);
 }
 
@@ -787,6 +797,30 @@ function setSaveState(text, tone = 'ok') {
   const element = $('#save-state');
   element.textContent = text;
   element.className = tone === 'warn' ? 'status-warn' : 'status-ok';
+}
+
+function readProjectFieldValue(field, element, throwOnError = true) {
+  if (field === 'targetWords') return readTargetWordsValue(element.value, throwOnError);
+  return element.value;
+}
+
+function isTargetWordsValue(rawValue) {
+  const trimmed = String(rawValue ?? '').trim();
+  const value = Number(trimmed);
+  return Boolean(trimmed) && Number.isFinite(value) && value >= MIN_TARGET_WORDS && value <= MAX_TARGET_WORDS;
+}
+
+function readTargetWordsValue(rawValue, throwOnError = true) {
+  if (!isTargetWordsValue(rawValue)) {
+    if (throwOnError) throw new Error(TARGET_WORDS_ERROR_MESSAGE);
+    return Number(rawValue);
+  }
+  const value = Number(String(rawValue).trim());
+  return value;
+}
+
+function isTargetWordsError(error) {
+  return error instanceof Error && error.message === TARGET_WORDS_ERROR_MESSAGE;
 }
 
 function setNeutralActionState(text) {
