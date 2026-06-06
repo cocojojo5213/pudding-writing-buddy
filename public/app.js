@@ -470,7 +470,7 @@ async function snapshotProject() {
     body: JSON.stringify({ project: state.project })
   });
   $('#output').value = `Snapshot saved: data/snapshots/${result.filename}`;
-  setSaveState('Snapshot', 'ok');
+  setNeutralActionState('Snapshot');
 }
 
 async function exportMarkdown() {
@@ -737,10 +737,15 @@ function setSaveState(text, tone = 'ok') {
   element.className = tone === 'warn' ? 'status-warn' : 'status-ok';
 }
 
+function setNeutralActionState(text) {
+  const dirty = state.ready && state.revision !== state.savedRevision;
+  setSaveState(dirty ? `${text}; Changed` : text, dirty ? 'warn' : 'ok');
+}
+
 function saveModelConfig() {
   try {
     localStorage.setItem('novel-copilot-model', JSON.stringify(getModelConfig()));
-    setSaveState('Model saved', 'ok');
+    setNeutralActionState('Model saved');
   } catch (error) {
     setSaveState('Model save error', 'warn');
     $('#output').value = error instanceof Error ? error.message : String(error);
