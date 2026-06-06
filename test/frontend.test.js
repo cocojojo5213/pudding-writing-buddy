@@ -1,0 +1,245 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { pathToFileURL } from 'node:url';
+import path from 'node:path';
+import { createDefaultProject } from '../lib.js';
+
+const APP_ROOT = path.resolve(import.meta.dirname, '..');
+
+test('typing into an empty chapter editor preserves the first edit on save', async () => {
+  const dom = createDomHarness();
+  const savedPayloads = [];
+  let project = createDefaultProject();
+
+  globalThis.document = dom.document;
+  globalThis.window = dom.window;
+  globalThis.localStorage = createStorage();
+  globalThis.fetch = async (requestPath, options = {}) => {
+    if (requestPath === '/api/project' && options.method === 'POST') {
+      const payload = JSON.parse(options.body);
+      savedPayloads.push(payload);
+      project = {
+        ...payload.project,
+        versionToken: 'saved-version-token',
+        updatedAt: '2026-06-06T00:00:00.000Z'
+      };
+      return jsonResponse(project);
+    }
+    if (requestPath === '/api/project') return jsonResponse(project);
+    throw new Error(`Unexpected fetch: ${requestPath}`);
+  };
+
+  const moduleUrl = pathToFileURL(path.join(APP_ROOT, 'public/app.js'));
+  await import(`${moduleUrl.href}?frontend-test=${Date.now()}`);
+  await waitFor(() => dom.byId('save-state').textContent === 'Ready');
+
+  dom.byId('chapterBody').value = '第一句不能被创建章节时的重绘抹掉。';
+  dom.byId('chapterBody').dispatchEvent({ type: 'input' });
+  dom.byId('save-project').click();
+
+  await waitFor(() => savedPayloads.length > 0);
+
+  assert.equal(savedPayloads[0].project.chapters.length, 1);
+  assert.equal(savedPayloads[0].project.chapters[0].body, '第一句不能被创建章节时的重绘抹掉。');
+});
+
+function jsonResponse(body, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    async text() {
+      return JSON.stringify(body);
+    }
+  };
+}
+
+function createStorage() {
+  const values = new Map();
+  return {
+    getItem(key) {
+      return values.has(key) ? values.get(key) : null;
+    },
+    setItem(key, value) {
+      values.set(key, String(value));
+    },
+    removeItem(key) {
+      values.delete(key);
+    }
+  };
+}
+
+function createDomHarness() {
+  const elements = new Map();
+  const allElements = [];
+
+  const register = (element) => {
+    allElements.push(element);
+    if (element.id) elements.set(element.id, element);
+    return element;
+  };
+
+  const idsByTag = {
+    INPUT: [
+      'title',
+      'genre',
+      'protagonist',
+      'targetWords',
+      'baseUrl',
+      'model',
+      'apiKey',
+      'temperature',
+      'maxTokens',
+      'chapterTitle',
+      'chapterSummary'
+    ],
+    TEXTAREA: [
+      'logline',
+      'authorIntent',
+      'currentFocus',
+      'storyBible',
+      'bookRules',
+      'bannedPatterns',
+      'notes',
+      'styleProfile',
+      'chapterPlan',
+      'chapterBody',
+      'chapterAudit',
+      'output'
+    ],
+    SELECT: ['language'],
+    BUTTON: [
+      'save-project',
+      'save-model',
+      'refresh-metrics',
+      'add-character',
+      'add-hook',
+      'add-outline',
+      'add-timeline',
+      'add-resource',
+      'add-arc',
+      'add-chapter',
+      'plan',
+      'context',
+      'draft',
+      'audit',
+      'revise',
+      'style',
+      'settle',
+      'brainstorm',
+      'snapshot',
+      'export-md',
+      'reset-project'
+    ],
+    DIV: ['metrics', 'chapter-metrics', 'characters', 'hooks', 'outline', 'timeline', 'resources', 'arcs', 'chapters', 'save-state'],
+    SECTION: ['brief-view', 'board-view', 'state-view', 'write-view', 'export-view']
+  };
+
+  for (const [tagName, ids] of Object.entries(idsByTag)) {
+    for (const id of ids) register(new TestElement(tagName, { id }));
+  }
+
+  const tabs = ['brief', 'board', 'state', 'write', 'export'].map((view) => {
+    const element = register(new TestElement('BUTTON', { classes: ['tab'], dataset: { view } }));
+    return element;
+  });
+  for (const view of ['brief', 'board', 'state', 'write', 'export']) {
+    elements.get(`${view}-view`).classList.add('view');
+  }
+
+  const body = register(new TestElement('BODY'));
+  const document = {
+    body,
+    querySelector(selector) {
+      if (selector.startsWith('#')) return elements.get(selector.slice(1)) || null;
+      const tabMatch = selector.match(/^\.tab\[data-view="([^"]+)"\]$/);
+      if (tabMatch) return tabs.find((tab) => tab.dataset.view === tabMatch[1]) || null;
+      return null;
+    },
+    querySelectorAll(selector) {
+      if (selector === '.tab') return tabs;
+      if (selector === '.view') return allElements.filter((element) => element.classList.contains('view'));
+      if (selector === 'button, input, textarea, select') {
+        return allElements.filter((element) => ['BUTTON', 'INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName));
+      }
+      if (selector.includes('[data-type=') || selector.includes('[data-remove=') || selector === '[data-chapter]') return [];
+      return [];
+    },
+    createElement(tagName) {
+      return new TestElement(tagName.toUpperCase());
+    }
+  };
+
+  return {
+    document,
+    window: {
+      addEventListener() {}
+    },
+    byId(id) {
+      return elements.get(id);
+    }
+  };
+}
+
+class TestElement {
+  constructor(tagName, { id = '', classes = [], dataset = {} } = {}) {
+    this.tagName = tagName;
+    this.id = id;
+    this.dataset = { ...dataset };
+    this.classList = new TestClassList(classes);
+    this.listeners = new Map();
+    this.value = '';
+    this.textContent = '';
+    this.innerHTML = '';
+    this.className = '';
+    this.disabled = false;
+  }
+
+  addEventListener(type, handler) {
+    const listeners = this.listeners.get(type) || [];
+    listeners.push(handler);
+    this.listeners.set(type, listeners);
+  }
+
+  dispatchEvent(event) {
+    for (const handler of this.listeners.get(event.type) || []) handler(event);
+    return true;
+  }
+
+  click() {
+    this.dispatchEvent({ type: 'click' });
+  }
+}
+
+class TestClassList {
+  constructor(classes = []) {
+    this.classes = new Set(classes);
+  }
+
+  add(...classes) {
+    for (const className of classes) this.classes.add(className);
+  }
+
+  remove(...classes) {
+    for (const className of classes) this.classes.delete(className);
+  }
+
+  toggle(className, force) {
+    const shouldAdd = force === undefined ? !this.classes.has(className) : Boolean(force);
+    if (shouldAdd) this.classes.add(className);
+    else this.classes.delete(className);
+    return shouldAdd;
+  }
+
+  contains(className) {
+    return this.classes.has(className);
+  }
+}
+
+async function waitFor(predicate) {
+  const deadline = Date.now() + 1000;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.fail('Timed out waiting for frontend condition');
+}

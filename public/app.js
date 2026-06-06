@@ -324,6 +324,13 @@ function addItem(type, item) {
 }
 
 function addChapter() {
+  const chapter = createChapter();
+  scheduleSave();
+  render();
+  return chapter;
+}
+
+function createChapter() {
   const chapter = {
     id: createId(),
     title: `第${state.project.chapters.length + 1}章`,
@@ -337,17 +344,16 @@ function addChapter() {
   };
   state.project.chapters.push(chapter);
   state.selectedChapterId = chapter.id;
-  scheduleSave();
-  render();
+  return chapter;
 }
 
 function updateSelectedChapterFromEditor() {
   let chapter = selectedChapter();
+  const createdFromEditor = !chapter;
   if (!chapter) {
-    addChapter();
-    chapter = selectedChapter();
+    chapter = createChapter();
   }
-  chapter.title = $('#chapterTitle').value;
+  chapter.title = $('#chapterTitle').value || (createdFromEditor ? chapter.title : '');
   chapter.plan = $('#chapterPlan').value;
   chapter.body = $('#chapterBody').value;
   chapter.audit = $('#chapterAudit').value;
