@@ -29,7 +29,9 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const REQUEST_BASE_URL = 'http://127.0.0.1';
 const MAX_BODY_BYTES = 5_000_000;
 const MODEL_TIMEOUT_MS = 120_000;
+const MAX_MODEL_RESPONSE_BYTES = 5_000_000;
 const MODEL_DNS_ERROR_MESSAGE = 'Model base URL must not resolve to private, link-local, multicast, metadata, or non-localhost loopback addresses.';
+const MODEL_RESPONSE_TOO_LARGE_MESSAGE = `Model response body too large; limit is ${MAX_MODEL_RESPONSE_BYTES} bytes.`;
 const ALLOW_PRIVATE_MODEL_BASE_URLS = process.env.ALLOW_PRIVATE_MODEL_BASE_URLS === '1';
 const DEFAULT_MODEL_TEMPERATURE = 0.75;
 const MIN_MODEL_TEMPERATURE = 0;
@@ -602,6 +604,17 @@ async function requestModelEndpoint(endpoint, payload, headers = {}, signal) {
   const body = JSON.stringify(payload);
   const request = url.protocol === 'https:' ? httpsRequest : httpRequest;
   return await new Promise((resolve, reject) => {
+    let settled = false;
+    const finishResolve = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    const finishReject = (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
     const clientRequest = request(url, {
       method: 'POST',
       signal,
@@ -615,15 +628,24 @@ async function requestModelEndpoint(endpoint, payload, headers = {}, signal) {
       const chunks = [];
       let totalBytes = 0;
       modelResponse.on('data', (chunk) => {
+        if (settled) return;
         const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-        chunks.push(buffer);
         totalBytes += buffer.length;
+        if (totalBytes > MAX_MODEL_RESPONSE_BYTES) {
+          const error = new Error(MODEL_RESPONSE_TOO_LARGE_MESSAGE);
+          modelResponse.destroy(error);
+          clientRequest.destroy(error);
+          finishReject(error);
+          return;
+        }
+        chunks.push(buffer);
       });
-      modelResponse.on('error', reject);
+      modelResponse.on('error', finishReject);
       modelResponse.on('end', () => {
+        if (settled) return;
         const text = Buffer.concat(chunks, totalBytes).toString('utf8');
         const status = modelResponse.statusCode || 0;
-        resolve({
+        finishResolve({
           ok: status >= 200 && status < 300,
           status,
           statusText: modelResponse.statusMessage || '',
@@ -631,7 +653,7 @@ async function requestModelEndpoint(endpoint, payload, headers = {}, signal) {
         });
       });
     });
-    clientRequest.on('error', reject);
+    clientRequest.on('error', finishReject);
     clientRequest.end(body);
   });
 }

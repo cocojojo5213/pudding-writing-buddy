@@ -674,6 +674,37 @@ test('api reports non-json successful model responses clearly', async () => {
   }
 });
 
+test('api rejects oversized model responses before buffering them fully', async () => {
+  const model = await startMockModel((_request, response) => {
+    response.on('error', () => {});
+    response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    for (let index = 0; index < 6; index += 1) {
+      response.write(Buffer.alloc(1_000_000, 'x'));
+    }
+    response.end();
+  });
+  const app = await startApp();
+  try {
+    const response = await requestJson(app.baseUrl, '/api/assist', {
+      method: 'POST',
+      body: JSON.stringify({
+        task: 'plan',
+        modelConfig: {
+          baseUrl: model.baseUrl,
+          apiKey: 'test-key',
+          model: 'test-model'
+        }
+      })
+    });
+
+    assert.equal(response.status, 500);
+    assert.match(response.body.error, /Model response body too large/);
+  } finally {
+    await app.stop();
+    await model.stop();
+  }
+});
+
 test('api normalizes model config before proxying requests', async () => {
   const proxiedRequests = [];
   const model = await startMockModel(async (request, response) => {
