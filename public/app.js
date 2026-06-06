@@ -293,6 +293,10 @@ function bindCollectionInputs(type) {
       const item = state.project[type].find((entry) => entry.id === card.dataset.id);
       if (!item) return;
       item[input.dataset.field] = input.value;
+      if (type === 'timeline') {
+        item.source = '';
+        item.chapterId = '';
+      }
       scheduleSave();
       renderMetrics();
     });

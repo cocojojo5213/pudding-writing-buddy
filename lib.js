@@ -953,8 +953,8 @@ function upsertSettlementTimelineEvent(project, settlement, existingChapter = {}
 }
 
 function isSameSettlementTimelineEvent(event, { chapterId, priorTitle, currentTitle, priorSummary, currentSummary }) {
-  if (chapterId && event.source === 'settlement' && event.chapterId === chapterId) return true;
-  if (event.source === 'settlement' && (event.chapter === priorTitle || event.chapter === currentTitle)) return true;
+  if (chapterId && event.source === 'settlement' && event.chapterId === chapterId && isGeneratedSettlementConsequence(event.consequence)) return true;
+  if (event.source === 'settlement' && (event.chapter === priorTitle || event.chapter === currentTitle) && isGeneratedSettlementConsequence(event.consequence)) return true;
   if (priorSummary && event.chapter === priorTitle && event.event === priorSummary && isGeneratedSettlementConsequence(event.consequence)) return true;
   return event.source === 'settlement' && event.chapter === currentTitle && event.event === currentSummary;
 }
