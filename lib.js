@@ -173,6 +173,7 @@ export function normalizeProject(input = {}) {
 }
 
 export function buildPrompt(task, project, payload = {}) {
+  payload = isPlainObject(payload) ? payload : {};
   const normalized = normalizeProject(project);
   const context = buildContextPacket(normalized, payload.chapterId || payload.chapterNumber);
   if (task === 'plan') {
@@ -226,6 +227,7 @@ export function buildPrompt(task, project, payload = {}) {
 }
 
 export function offlineAssist(task, project, payload = {}) {
+  payload = isPlainObject(payload) ? payload : {};
   const normalized = normalizeProject(project);
   if (task === 'plan') return offlinePlan(normalized, payload);
   if (task === 'draft') return offlineDraft(normalized, payload);
@@ -287,6 +289,8 @@ export function buildContextPacket(project, chapterRef) {
 }
 
 export function offlinePlan(project, payload = {}) {
+  payload = isPlainObject(payload) ? payload : {};
+  project = normalizeProject(project);
   const chapterNumber = resolveChapterNumber(project, payload.chapterId || payload.chapterNumber);
   const outline = project.outline[chapterNumber - 1] || project.outline.at(-1) || {};
   const activeHooks = project.hooks.filter((hook) => hook.status !== 'resolved').slice(0, 3);
@@ -323,11 +327,15 @@ export function offlinePlan(project, payload = {}) {
 }
 
 export function offlineDraft(project, payload = {}) {
+  payload = isPlainObject(payload) ? payload : {};
+  project = normalizeProject(project);
   if (project.language === 'en') return offlineDraftEn(project, payload);
   return offlineDraftZh(project, payload);
 }
 
 export function offlineDraftZh(project, payload = {}) {
+  payload = isPlainObject(payload) ? payload : {};
+  project = normalizeProject(project);
   const chapterNumber = resolveChapterNumber(project, payload.chapterId || payload.chapterNumber);
   const plan = payload.plan || offlinePlan(project, payload);
   const outline = project.outline[chapterNumber - 1] || project.outline.at(-1) || {};
@@ -373,6 +381,8 @@ export function offlineDraftZh(project, payload = {}) {
 }
 
 export function offlineDraftEn(project, payload = {}) {
+  payload = isPlainObject(payload) ? payload : {};
+  project = normalizeProject(project);
   const chapterNumber = resolveChapterNumber(project, payload.chapterId || payload.chapterNumber);
   const outline = project.outline[chapterNumber - 1] || project.outline.at(-1) || {};
   const protagonist = project.protagonist || project.characters[0]?.name || 'the protagonist';
@@ -401,7 +411,9 @@ export function offlineDraftEn(project, payload = {}) {
 }
 
 export function offlineAudit(project, text = '', payload = {}) {
-  const normalized = text.trim();
+  payload = isPlainObject(payload) ? payload : {};
+  project = normalizeProject(project);
+  const normalized = asString(text, '').trim();
   const findings = [];
   const metrics = analyzeDraftQuality(project, normalized, payload.plan || '');
   if (!normalized) {
@@ -444,22 +456,24 @@ export function offlineAudit(project, text = '', payload = {}) {
 }
 
 export function analyzeDraftQuality(project, text = '', plan = '') {
-  const length = countTextLength(text, project.language);
+  project = normalizeProject(project);
+  const draftText = asString(text, '');
+  const length = countTextLength(draftText, project.language);
   const target = Number(project.targetWords) || 2200;
   const banned = parseBannedPatterns(project.bannedPatterns);
   const aiTellWords = [...new Set([...banned, '命运的齿轮', '无法想象', '某种意义上', '毋庸置疑', '不言而喻', '仿佛整个世界', '深深地吸了一口气'])];
-  const aiTellHits = aiTellWords.filter((word) => word && text.includes(word));
-  const usedCharacters = project.characters.filter((character) => character.name && text.includes(character.name)).length;
+  const aiTellHits = aiTellWords.filter((word) => word && draftText.includes(word));
+  const usedCharacters = project.characters.filter((character) => character.name && draftText.includes(character.name)).length;
   const activeHooksList = project.hooks.filter((hook) => hook.status !== 'resolved');
-  const touchedHooks = activeHooksList.filter((hook) => hookTouched(text, hook.text)).length;
-  const dialogueTurns = (text.match(/[“"][^”"\n]{2,}[”"]/g) || []).length;
-  const sceneAnchors = countSceneAnchors(text);
-  const sentences = splitSentences(text);
+  const touchedHooks = activeHooksList.filter((hook) => hookTouched(draftText, hook.text)).length;
+  const dialogueTurns = (draftText.match(/[“"][^”"\n]{2,}[”"]/g) || []).length;
+  const sceneAnchors = countSceneAnchors(draftText);
+  const sentences = splitSentences(draftText);
   const repeatedSentences = findRepeated(sentences);
   const expositionRatio = estimateExpositionRatio(sentences);
   const planKeywords = extractKeywords(plan).slice(0, 12);
-  const planHits = planKeywords.filter((keyword) => text.includes(keyword)).length;
-  const hasCompleteEnding = !text || /[。！？.!?]\s*$/.test(text.trim());
+  const planHits = planKeywords.filter((keyword) => draftText.includes(keyword)).length;
+  const hasCompleteEnding = !draftText || /[。！？.!?]\s*$/.test(draftText.trim());
   const score = clampNumber(
     100
       - aiTellHits.length * 4
@@ -494,7 +508,7 @@ export function analyzeDraftQuality(project, text = '', plan = '') {
 }
 
 export function offlineRevise(text = '', audit = '') {
-  if (!text.trim()) return '原文为空，无法修订。';
+  if (!asString(text, '').trim()) return '原文为空，无法修订。';
   const replacements = [
     ['命运的齿轮开始转动', '门后的脚步声越来越近'],
     ['命运的齿轮', '正在逼近的后果'],
@@ -505,7 +519,7 @@ export function offlineRevise(text = '', audit = '') {
     ['仿佛整个世界', '眼前的灯光和墙面'],
     ['深深地吸了一口气', '把呼吸压慢']
   ];
-  let revised = text.trim();
+  let revised = asString(text, '').trim();
   for (const [from, to] of replacements) revised = revised.split(from).join(to);
   if (/对白偏少|人物互动不足/.test(audit) && !/[“"][^”"\n]{2,}[”"]/.test(revised)) {
     revised += '\n\n“你到底隐瞒了什么？”\n\n对方没有立刻回答，这个停顿让新的问题变得更具体。';
@@ -520,6 +534,7 @@ export function offlineRevise(text = '', audit = '') {
 }
 
 export function offlineBrainstorm(project) {
+  project = normalizeProject(project);
   const unresolved = project.hooks.filter((hook) => hook.status !== 'resolved');
   const character = project.characters[0] || { name: project.protagonist, conflict: '内部矛盾' };
   const resource = project.resources[0]?.item || '关键物证';
@@ -540,7 +555,7 @@ export function offlineBrainstorm(project) {
 }
 
 export function analyzeStyle(text = '') {
-  const trimmed = text.trim();
+  const trimmed = asString(text, '').trim();
   if (!trimmed) return '没有文本可分析。';
   const sentences = splitSentences(trimmed);
   const lengths = sentences.map((sentence) => countTextLength(sentence, hasCjk(sentence) ? 'zh' : 'en'));
@@ -571,7 +586,7 @@ export function analyzeStyle(text = '') {
 
 export function settleChapterState(project, chapterInput = {}) {
   const normalized = normalizeProject(project);
-  const chapter = normalizeChapter(chapterInput);
+  const chapter = normalizeChapter(isPlainObject(chapterInput) ? chapterInput : {});
   const body = chapter.body || chapter.text || '';
   const chapterNumber = resolveChapterNumber(normalized, chapter.id || chapter.number);
   const title = chapter.title || `第${chapterNumber}章`;
@@ -616,7 +631,7 @@ export function settleChapterState(project, chapterInput = {}) {
 
 export function applySettlement(project, chapterInput = {}) {
   const normalized = normalizeProject(project);
-  const incomingChapter = normalizeChapter(chapterInput);
+  const incomingChapter = normalizeChapter(isPlainObject(chapterInput) ? chapterInput : {});
   const chapterIndex = normalized.chapters.findIndex((chapter) => chapter.id === incomingChapter.id);
   const existingChapter = chapterIndex >= 0 ? normalized.chapters[chapterIndex] : {};
   const chapterForSettlement = {

@@ -14,7 +14,11 @@ import {
   formatSettlement,
   normalizeProject,
   offlineAssist,
-  offlineAudit
+  offlineAudit,
+  offlineBrainstorm,
+  offlineDraft,
+  offlinePlan,
+  offlineRevise
 } from '../lib.js';
 
 test('normalizes partial projects with core writing lists', () => {
@@ -305,6 +309,35 @@ test('draft quality detects AI phrasing and continuity risk', () => {
   assert.ok(metrics.aiTellHits.includes('命运的齿轮'));
   const audit = offlineAudit(project, text, { plan: '推进妹妹书包里出现一张未来日期的医院缴费单' });
   assert.match(audit, /句子重复|AI 腔/);
+});
+
+test('exported offline helpers tolerate sparse projects and non-string text', () => {
+  const prompt = buildPrompt('plan', {}, null);
+  const assistedPlan = offlineAssist('plan', {}, null);
+  const assistedSettlement = offlineAssist('settle', {}, null);
+  const plan = offlinePlan({}, null);
+  const fractionalPlan = offlinePlan({}, { chapterNumber: '1.5' });
+  const zhDraft = offlineDraft({ title: 'Sparse Draft', hooks: null, characters: null }, null);
+  const enDraft = offlineDraft({ language: 'en', outline: null, chapters: null }, {});
+  const brainstorm = offlineBrainstorm(null);
+  const metrics = analyzeDraftQuality({}, 42, ['not a string plan']);
+  const audit = offlineAudit({ hooks: null, characters: null }, 42, null);
+  const style = analyzeStyle(42);
+  const revision = offlineRevise(42, '结尾不完整');
+
+  assert.match(prompt, /章节策划/);
+  assert.match(assistedPlan, /章节目标/);
+  assert.match(assistedSettlement, /Chapter Settlement/);
+  assert.match(plan, /章节目标/);
+  assert.doesNotMatch(fractionalPlan, /第1\.5章/);
+  assert.match(zhDraft, /第1章/);
+  assert.match(enDraft, /Chapter 1/);
+  assert.match(brainstorm, /创作建议/);
+  assert.equal(metrics.length, 1);
+  assert.match(audit, /质量评分/);
+  assert.match(style, /风格指纹/);
+  assert.equal(revision, '42。');
+  assert.throws(() => applySettlement({}, null), /without body text/);
 });
 
 test('settlement applies chapter summary and truth-file updates', () => {
