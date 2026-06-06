@@ -428,7 +428,7 @@ function assertCompleteProjectPayload(project) {
       if (typeof item.id === 'string') {
         const id = item.id.trim();
         const idPath = `${field}[${index}].id`;
-        if (!id || hasControlCharacters(id)) {
+        if (!id || id !== item.id || hasControlCharacters(id)) {
           malformedCollectionItemFields.push(idPath);
         } else if (seenIds.has(id)) {
           duplicateCollectionItemIds.push(idPath);

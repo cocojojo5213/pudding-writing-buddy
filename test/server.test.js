@@ -311,6 +311,22 @@ test('api rejects project saves without a complete project payload', async () =>
     assert.equal(blankCollectionIdProject.status, 400);
     assert.match(blankCollectionIdProject.body.error, /Malformed collection item fields: characters\[0\]\.id/);
 
+    const paddedCollectionId = {
+      ...savedProject.body,
+      characters: savedProject.body.characters.map((character, index) => (index === 0
+        ? { ...character, id: ` ${character.id} ` }
+        : character))
+    };
+    const paddedCollectionIdProject = await requestJson(app.baseUrl, '/api/project', {
+      method: 'POST',
+      body: JSON.stringify({
+        project: paddedCollectionId,
+        expectedVersionToken: savedProject.body.versionToken
+      })
+    });
+    assert.equal(paddedCollectionIdProject.status, 400);
+    assert.match(paddedCollectionIdProject.body.error, /Malformed collection item fields: characters\[0\]\.id/);
+
     const unsafeCollectionId = {
       ...savedProject.body,
       characters: savedProject.body.characters.map((character, index) => (index === 0
