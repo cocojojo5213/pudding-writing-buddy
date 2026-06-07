@@ -914,7 +914,8 @@ function isPlainObject(value) {
 }
 
 function boundedNumber(value, { defaultValue, min, max }) {
-  const raw = toTrimmedString(value);
+  if (typeof value !== 'string' && (typeof value !== 'number' || !Number.isFinite(value))) return defaultValue;
+  const raw = typeof value === 'string' ? value.trim() : String(value);
   if (!raw) return defaultValue;
   const number = Number(raw);
   if (!Number.isFinite(number)) return defaultValue;
