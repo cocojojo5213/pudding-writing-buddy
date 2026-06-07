@@ -1250,6 +1250,8 @@ test('api rejects unsafe model base URLs before proxying', async () => {
     const unsafeBaseUrls = [
       'ftp://example.test/v1',
       'https://example.test/v1?key=value',
+      'https://user:pass@example.test/v1',
+      'https://user@example.test/v1',
       'http://0.0.0.0/v1',
       'http://10.0.0.1/v1',
       'http://167772161/v1',

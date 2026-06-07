@@ -731,6 +731,9 @@ function buildModelEndpoint(baseUrlValue) {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     throw new HttpError(400, 'Model base URL must use http or https.');
   }
+  if (url.username || url.password) {
+    throw new HttpError(400, 'Model base URL must not include usernames or passwords.');
+  }
   if (url.search || url.hash) {
     throw new HttpError(400, 'Model base URL must not include query strings or fragments.');
   }
