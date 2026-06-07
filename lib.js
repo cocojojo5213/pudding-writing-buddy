@@ -638,14 +638,14 @@ export function applySettlement(project, chapterInput = {}) {
   const chapterForSettlement = {
     ...existingChapter,
     id: incomingChapter.id || existingChapter.id,
-    title: incomingChapter.title || existingChapter.title,
+    title: firstNonBlank(incomingChapter.title, existingChapter.title),
     body: firstNonBlank(incomingChapter.body, existingChapter.body, ''),
-    plan: incomingChapter.plan || existingChapter.plan || '',
-    audit: incomingChapter.audit || existingChapter.audit || '',
-    summary: incomingChapter.summary || existingChapter.summary || '',
-    status: incomingChapter.status || existingChapter.status || 'draft',
-    createdAt: incomingChapter.createdAt || existingChapter.createdAt,
-    settledAt: incomingChapter.settledAt || existingChapter.settledAt
+    plan: firstNonBlank(incomingChapter.plan, existingChapter.plan, ''),
+    audit: firstNonBlank(incomingChapter.audit, existingChapter.audit, ''),
+    summary: firstNonBlank(incomingChapter.summary, existingChapter.summary, ''),
+    status: firstNonBlank(incomingChapter.status, existingChapter.status, 'draft'),
+    createdAt: firstNonBlank(incomingChapter.createdAt, existingChapter.createdAt, ''),
+    settledAt: firstNonBlank(incomingChapter.settledAt, existingChapter.settledAt, '')
   };
   if (!String(chapterForSettlement.body || '').trim()) {
     const error = new Error('Cannot settle a chapter without body text.');

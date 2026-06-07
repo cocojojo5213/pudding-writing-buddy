@@ -640,6 +640,41 @@ test('settlement uses saved body when incoming body is blank', () => {
   assert.match(settled.chapters[0].summary, /医院缴费单/);
 });
 
+test('settlement preserves saved chapter metadata when incoming fields are blank', () => {
+  const project = normalizeProject({
+    ...createDefaultProject(),
+    chapters: [{
+      id: 'blank-incoming-metadata',
+      title: '第1章 已保存标题',
+      body: '林澈把未来日期的医院缴费单夹进笔记本。许闻说：“这张单子会回来。”',
+      plan: '已有计划不能被空白传入覆盖',
+      audit: '已有审校不能被空白传入覆盖',
+      summary: '',
+      status: 'revised',
+      createdAt: '2026-06-01T00:00:00.000Z',
+      settledAt: ''
+    }]
+  });
+  const { project: settled } = applySettlement(project, {
+    id: 'blank-incoming-metadata',
+    title: '   ',
+    body: '   ',
+    plan: '   ',
+    audit: '   ',
+    status: '   ',
+    createdAt: '   '
+  });
+
+  assert.equal(settled.chapters[0].title, '第1章 已保存标题');
+  assert.equal(settled.chapters[0].body, project.chapters[0].body);
+  assert.equal(settled.chapters[0].plan, '已有计划不能被空白传入覆盖');
+  assert.equal(settled.chapters[0].audit, '已有审校不能被空白传入覆盖');
+  assert.equal(settled.chapters[0].status, 'revised');
+  assert.equal(settled.chapters[0].createdAt, '2026-06-01T00:00:00.000Z');
+  assert.match(settled.timeline.at(-1).chapter, /已保存标题/);
+  assert.match(settled.chapters[0].summary, /医院缴费单/);
+});
+
 test('settlement refreshes stale summaries from the current body', () => {
   const project = normalizeProject({
     ...createDefaultProject(),
