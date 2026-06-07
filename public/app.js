@@ -562,8 +562,9 @@ async function assist(task, payload) {
         modelConfig: getModelConfig()
       })
     });
+    const output = responseTextField(response?.output, 'assist output', { allowBlank: false });
     setSaveState('Ready', 'ok');
-    return response.output;
+    return output;
   } catch (error) {
     setSaveState('Assist error', 'warn');
     $('#output').value = error.message;

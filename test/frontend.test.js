@@ -597,6 +597,115 @@ test('snapshot rejects malformed API filenames instead of showing fake paths', a
   }
 });
 
+test('assist rejects malformed API output before mutating chapters', async () => {
+  const dom = createDomHarness();
+  const originalConsoleError = console.error;
+  const project = {
+    ...createDefaultProject(),
+    chapters: [{
+      id: 'malformed-assist-output-chapter',
+      title: '第1章',
+      body: '林澈把医院缴费单压在台灯下。',
+      plan: '',
+      audit: '',
+      summary: '',
+      status: 'draft',
+      createdAt: '',
+      settledAt: ''
+    }]
+  };
+  let saveAttempts = 0;
+
+  try {
+    console.error = () => {};
+    globalThis.document = dom.document;
+    globalThis.window = dom.window;
+    globalThis.localStorage = createStorage();
+    globalThis.fetch = async (requestPath, options = {}) => {
+      if (requestPath === '/api/project' && options.method === 'POST') {
+        saveAttempts += 1;
+        return jsonResponse({ error: 'Malformed assist output must not be saved' }, 500);
+      }
+      if (requestPath === '/api/assist' && options.method === 'POST') {
+        const payload = JSON.parse(options.body);
+        assert.equal(payload.task, 'plan');
+        return jsonResponse({
+          output: { text: '# Should not become chapter plan' }
+        });
+      }
+      if (requestPath === '/api/project') return jsonResponse(project);
+      throw new Error(`Unexpected fetch: ${requestPath}`);
+    };
+
+    const moduleUrl = pathToFileURL(path.join(APP_ROOT, 'public/app.js'));
+    await import(`${moduleUrl.href}?frontend-test=${Date.now()}`);
+    await waitFor(() => dom.byId('save-state').textContent === 'Ready');
+
+    dom.byId('plan').click();
+
+    await waitFor(() => dom.byId('save-state').textContent === 'Error');
+    assert.equal(dom.byId('output').value, 'Server returned an invalid assist output.');
+    assert.equal(dom.byId('chapterPlan').value, '');
+    assert.doesNotMatch(dom.byId('output').value, /\[object Object\]|Should not become chapter plan/);
+    assert.equal(saveAttempts, 0);
+  } finally {
+    console.error = originalConsoleError;
+  }
+});
+
+test('assist rejects blank API output before clearing generated fields', async () => {
+  const dom = createDomHarness();
+  const originalConsoleError = console.error;
+  const project = {
+    ...createDefaultProject(),
+    chapters: [{
+      id: 'blank-assist-output-chapter',
+      title: '第1章',
+      body: '林澈把医院缴费单压在台灯下。',
+      plan: '已有计划不能被空白生成覆盖。',
+      audit: '',
+      summary: '',
+      status: 'draft',
+      createdAt: '',
+      settledAt: ''
+    }]
+  };
+  let saveAttempts = 0;
+
+  try {
+    console.error = () => {};
+    globalThis.document = dom.document;
+    globalThis.window = dom.window;
+    globalThis.localStorage = createStorage();
+    globalThis.fetch = async (requestPath, options = {}) => {
+      if (requestPath === '/api/project' && options.method === 'POST') {
+        saveAttempts += 1;
+        return jsonResponse({ error: 'Blank assist output must not be saved' }, 500);
+      }
+      if (requestPath === '/api/assist' && options.method === 'POST') {
+        const payload = JSON.parse(options.body);
+        assert.equal(payload.task, 'plan');
+        return jsonResponse({ output: '   \n\t  ' });
+      }
+      if (requestPath === '/api/project') return jsonResponse(project);
+      throw new Error(`Unexpected fetch: ${requestPath}`);
+    };
+
+    const moduleUrl = pathToFileURL(path.join(APP_ROOT, 'public/app.js'));
+    await import(`${moduleUrl.href}?frontend-test=${Date.now()}`);
+    await waitFor(() => dom.byId('save-state').textContent === 'Ready');
+
+    dom.byId('plan').click();
+
+    await waitFor(() => dom.byId('save-state').textContent === 'Error');
+    assert.equal(dom.byId('output').value, 'Server returned an invalid assist output.');
+    assert.equal(dom.byId('chapterPlan').value, '已有计划不能被空白生成覆盖。');
+    assert.equal(saveAttempts, 0);
+  } finally {
+    console.error = originalConsoleError;
+  }
+});
+
 test('settlement output keeps API-provided fields on one markdown line', async () => {
   const dom = createDomHarness();
   const project = {
