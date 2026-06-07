@@ -522,6 +522,70 @@ test('settlement output keeps API-provided fields on one markdown line', async (
   assert.match(dom.byId('output').value, /^- 林澈 ## Fake Character: 知道缴费单 - fake knowledge$/m);
 });
 
+test('settlement output falls back for malformed API-provided fields', async () => {
+  const dom = createDomHarness();
+  const project = {
+    ...createDefaultProject(),
+    chapters: [{
+      id: 'chapter-with-malformed-settlement-output',
+      title: '第1章',
+      body: '林澈把未来日期的医院缴费单放在桌上。',
+      plan: '',
+      audit: '',
+      summary: '',
+      status: 'draft',
+      createdAt: '',
+      settledAt: ''
+    }]
+  };
+
+  globalThis.document = dom.document;
+  globalThis.window = dom.window;
+  globalThis.localStorage = createStorage();
+  globalThis.fetch = async (requestPath, options = {}) => {
+    if (requestPath === '/api/project') return jsonResponse(project);
+    if (requestPath === '/api/settle' && options.method === 'POST') {
+      return jsonResponse({
+        project: {
+          ...project,
+          chapters: [{
+            ...project.chapters[0],
+            summary: '摘要',
+            settledAt: '2026-06-07T00:00:00.000Z'
+          }]
+        },
+        settlement: {
+          title: { text: 'fake title' },
+          summary: ['fake summary'],
+          timelineEvent: {
+            event: { text: 'fake event' },
+            consequence: ['fake consequence']
+          },
+          characterUpdates: [{ name: ['fake character'], knowledge: { text: 'fake knowledge' } }],
+          hookUpdates: { text: 'not an array' },
+          resourceUpdates: [{ item: false, note: { text: 'fake resource' } }]
+        }
+      });
+    }
+    throw new Error(`Unexpected fetch: ${requestPath}`);
+  };
+
+  const moduleUrl = pathToFileURL(path.join(APP_ROOT, 'public/app.js'));
+  await import(`${moduleUrl.href}?frontend-test=${Date.now()}`);
+  await waitFor(() => dom.byId('save-state').textContent === 'Ready');
+
+  dom.byId('settle').click();
+
+  await waitFor(() => dom.byId('output').value.includes('Chapter Settlement'));
+  assert.match(dom.byId('output').value, /^Chapter: 未命名章节$/m);
+  assert.match(dom.byId('output').value, /^Summary: 未提取到摘要$/m);
+  assert.match(dom.byId('output').value, /^- 未生成$/m);
+  assert.match(dom.byId('output').value, /^- 未命名: 未记录$/m);
+  assert.match(dom.byId('output').value, /^- 未识别到伏笔推进$/m);
+  assert.match(dom.byId('output').value, /^- 未命名资源: 未记录$/m);
+  assert.doesNotMatch(dom.byId('output').value, /\[object Object\]|fake title|fake summary|fake event|fake character|fake resource/);
+});
+
 test('settlement keeps the editor on the returned chapter when ids change', async () => {
   const dom = createDomHarness();
   const project = {

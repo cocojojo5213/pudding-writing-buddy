@@ -946,38 +946,46 @@ function parseAuditScore(audit) {
 }
 
 function formatSettlement(settlement) {
+  const characterUpdates = Array.isArray(settlement?.characterUpdates) ? settlement.characterUpdates : [];
+  const hookUpdates = Array.isArray(settlement?.hookUpdates) ? settlement.hookUpdates : [];
+  const resourceUpdates = Array.isArray(settlement?.resourceUpdates) ? settlement.resourceUpdates : [];
   return [
     '# Chapter Settlement',
     '',
-    `Chapter: ${formatReportLine(settlement.title, '未命名章节')}`,
-    `Summary: ${formatReportLine(settlement.summary, '未提取到摘要')}`,
+    `Chapter: ${formatReportLine(settlement?.title, '未命名章节')}`,
+    `Summary: ${formatReportLine(settlement?.summary, '未提取到摘要')}`,
     '',
     '## Timeline',
-    `- ${formatReportLine(settlement.timelineEvent?.event, '未生成')}`,
-    `  Consequence: ${formatReportLine(settlement.timelineEvent?.consequence, '未生成')}`,
+    `- ${formatReportLine(settlement?.timelineEvent?.event, '未生成')}`,
+    `  Consequence: ${formatReportLine(settlement?.timelineEvent?.consequence, '未生成')}`,
     '',
     '## Character Updates',
-    ...(settlement.characterUpdates?.length
-      ? settlement.characterUpdates.map((item) => `- ${formatReportLine(item.name, '未命名')}: ${formatReportLine(item.knowledge, '未记录')}`)
+    ...(characterUpdates.length
+      ? characterUpdates.map((item) => `- ${formatReportLine(item?.name, '未命名')}: ${formatReportLine(item?.knowledge, '未记录')}`)
       : ['- 未识别到人物变化']),
     '',
     '## Hook Updates',
-    ...(settlement.hookUpdates?.length
-      ? settlement.hookUpdates.map((item) => `- ${formatReportLine(item.text, '未命名伏笔')}: ${formatReportLine(item.from, '未知')} -> ${formatReportLine(item.to, '未知')}`)
+    ...(hookUpdates.length
+      ? hookUpdates.map((item) => `- ${formatReportLine(item?.text, '未命名伏笔')}: ${formatReportLine(item?.from, '未知')} -> ${formatReportLine(item?.to, '未知')}`)
       : ['- 未识别到伏笔推进']),
     '',
     '## Resource Updates',
-    ...(settlement.resourceUpdates?.length
-      ? settlement.resourceUpdates.map((item) => `- ${formatReportLine(item.item, '未命名资源')}: ${formatReportLine(item.note, '未记录')}`)
+    ...(resourceUpdates.length
+      ? resourceUpdates.map((item) => `- ${formatReportLine(item?.item, '未命名资源')}: ${formatReportLine(item?.note, '未记录')}`)
       : ['- 未识别到资源变化'])
   ].join('\n');
 }
 
 function formatReportLine(value, fallback = '') {
+  if (!isReportTextValue(value)) return fallback;
   return String(value ?? '')
     .replace(/[\u0000-\u001f\u007f]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim() || fallback;
+}
+
+function isReportTextValue(value) {
+  return typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value));
 }
 
 function createId() {

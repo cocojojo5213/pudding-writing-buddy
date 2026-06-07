@@ -175,7 +175,8 @@ git log --oneline -3
 - `offlineRevise` 的 audit 输入统一走文本归一化。
 - 直接传入 object/array/boolean 的文本 helper 已有回归测试，避免生成 `[object Object]` 或假正文。
 - `applySettlement()` 直接入口现在不会让空白 incoming 标题、计划、审校、状态或创建时间覆盖已保存章节元数据。
-- 当前完整测试为 93 个通过。
+- 前端 settlement 报告显示现在会对畸形 API 字段回落到默认文案，不再显示 `[object Object]` 或数组伪文本。
+- 当前完整测试为 94 个通过。
 
 下次继续逐行审计前先看：
 
