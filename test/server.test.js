@@ -762,6 +762,52 @@ test('api settlement uses saved chapter text when client sends only a chapter id
   }
 });
 
+test('api settlement does not coerce malformed chapter ids to saved chapter ids', async () => {
+  const app = await startApp();
+  try {
+    const project = (await requestJson(app.baseUrl, '/api/project')).body;
+    project.chapters = [{
+      id: 'array-like-settle-id',
+      title: '第1章 已保存正文',
+      body: '林澈把未来日期的医院缴费单放进口袋。许闻说：“别让它离开你。”',
+      plan: '已有计划',
+      audit: '已有审校',
+      summary: '',
+      status: 'draft',
+      createdAt: '',
+      settledAt: ''
+    }];
+    const savedProject = await requestJson(app.baseUrl, '/api/project', {
+      method: 'POST',
+      body: JSON.stringify({
+        project,
+        expectedVersionToken: project.versionToken
+      })
+    });
+    assert.equal(savedProject.status, 200);
+
+    const rejected = await requestJson(app.baseUrl, '/api/settle', {
+      method: 'POST',
+      body: JSON.stringify({
+        project: savedProject.body,
+        expectedVersionToken: savedProject.body.versionToken,
+        chapter: { id: ['array-like-settle-id'] }
+      })
+    });
+
+    assert.equal(rejected.status, 400);
+    assert.match(rejected.body.error, /without body text/);
+
+    const saved = JSON.parse(await readFile(path.join(app.dataDir, 'project.json'), 'utf8'));
+    assert.equal(saved.versionToken, savedProject.body.versionToken);
+    assert.equal(saved.chapters.length, 1);
+    assert.equal(saved.chapters[0].body, project.chapters[0].body);
+    assert.equal(saved.chapters[0].settledAt, '');
+  } finally {
+    await app.stop();
+  }
+});
+
 test('api settlement falls back to legacy text when incoming body shape is malformed', async () => {
   const app = await startApp();
   try {

@@ -888,7 +888,7 @@ function ipv4FromIpv6Words(high, low) {
 }
 
 function toTrimmedString(value) {
-  return typeof value === 'string' ? value.trim() : String(value ?? '').trim();
+  return textScalar(value).trim();
 }
 
 function modelConfigText(value) {
