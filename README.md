@@ -82,6 +82,7 @@ curl -s http://127.0.0.1:5179/api/health
 - `lib.js`: shared project, prompt, audit, settlement, metrics, and export logic.
 - `test/core.test.js`: API-independent regression tests.
 - `CODE_AUDIT.md`: line-by-line audit notes and remediation map.
+- `MAINTENANCE.md`: local maintenance runbook, verification checklist, and current stop point.
 - `REFERENCE.md`: source project study and links.
 - `data/project.json`: generated local project state, ignored by git by default.
 
