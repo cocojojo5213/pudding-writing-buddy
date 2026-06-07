@@ -495,7 +495,8 @@ async function snapshotProject() {
     method: 'POST',
     body: JSON.stringify({ project: state.project })
   });
-  $('#output').value = `Snapshot saved: data/snapshots/${result.filename}`;
+  const filename = responseTextField(result?.filename, 'snapshot filename', { allowBlank: false });
+  $('#output').value = `Snapshot saved: data/snapshots/${filename}`;
   setNeutralActionState('Snapshot');
 }
 
@@ -506,12 +507,14 @@ async function exportMarkdown() {
     method: 'POST',
     body: JSON.stringify({ project: state.project })
   });
-  $('#output').value = result.markdown;
-  const blob = new Blob([result.markdown], { type: 'text/markdown;charset=utf-8' });
+  const markdown = responseTextField(result?.markdown, 'export markdown');
+  const filename = responseTextField(result?.filename, 'export filename', { allowBlank: false });
+  $('#output').value = markdown;
+  const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = result.filename;
+  link.download = filename;
   link.style.display = 'none';
   document.body.appendChild(link);
   try {
@@ -998,6 +1001,13 @@ function cloneProject(project) {
 
 function isPlainObject(value) {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function responseTextField(value, label, { allowBlank = true } = {}) {
+  if (typeof value !== 'string' || (!allowBlank && !value.trim())) {
+    throw new Error(`Server returned an invalid ${label}.`);
+  }
+  return value;
 }
 
 function countLength(text = '') {

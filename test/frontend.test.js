@@ -297,6 +297,119 @@ test('markdown export clicks a mounted link and revokes the object URL after cle
   await waitFor(() => revokedUrls.includes('blob:pudding-export'));
 });
 
+test('markdown export rejects malformed API fields before downloading', async () => {
+  const clickedLinks = [];
+  const objectUrls = [];
+  const dom = createDomHarness({
+    onElementCreated(element) {
+      if (element.tagName === 'A') {
+        element.clickHook = () => {
+          clickedLinks.push({
+            href: element.href,
+            download: element.download
+          });
+        };
+      }
+    }
+  });
+  const originalConsoleError = console.error;
+  const project = createDefaultProject();
+
+  try {
+    console.error = () => {};
+    globalThis.document = dom.document;
+    globalThis.window = dom.window;
+    globalThis.localStorage = createStorage();
+    globalThis.URL = {
+      createObjectURL() {
+        objectUrls.push('created');
+        return 'blob:should-not-download';
+      },
+      revokeObjectURL() {}
+    };
+    globalThis.fetch = async (requestPath, options = {}) => {
+      if (requestPath === '/api/project') return jsonResponse(project);
+      if (requestPath === '/api/export' && options.method === 'POST') {
+        return jsonResponse({
+          filename: { value: 'Pudding.md' },
+          markdown: '# Should not download'
+        });
+      }
+      throw new Error(`Unexpected fetch: ${requestPath}`);
+    };
+
+    const moduleUrl = pathToFileURL(path.join(APP_ROOT, 'public/app.js'));
+    await import(`${moduleUrl.href}?frontend-test=${Date.now()}`);
+    await waitFor(() => dom.byId('save-state').textContent === 'Ready');
+
+    dom.byId('export-md').click();
+
+    await waitFor(() => dom.byId('save-state').textContent === 'Error');
+    assert.equal(dom.byId('output').value, 'Server returned an invalid export filename.');
+    assert.equal(clickedLinks.length, 0);
+    assert.equal(objectUrls.length, 0);
+  } finally {
+    console.error = originalConsoleError;
+  }
+});
+
+test('markdown export rejects malformed markdown before showing fake content', async () => {
+  const clickedLinks = [];
+  const objectUrls = [];
+  const dom = createDomHarness({
+    onElementCreated(element) {
+      if (element.tagName === 'A') {
+        element.clickHook = () => {
+          clickedLinks.push({
+            href: element.href,
+            download: element.download
+          });
+        };
+      }
+    }
+  });
+  const originalConsoleError = console.error;
+  const project = createDefaultProject();
+
+  try {
+    console.error = () => {};
+    globalThis.document = dom.document;
+    globalThis.window = dom.window;
+    globalThis.localStorage = createStorage();
+    globalThis.URL = {
+      createObjectURL() {
+        objectUrls.push('created');
+        return 'blob:should-not-download-markdown';
+      },
+      revokeObjectURL() {}
+    };
+    globalThis.fetch = async (requestPath, options = {}) => {
+      if (requestPath === '/api/project') return jsonResponse(project);
+      if (requestPath === '/api/export' && options.method === 'POST') {
+        return jsonResponse({
+          filename: 'Pudding.md',
+          markdown: ['# Should not stringify']
+        });
+      }
+      throw new Error(`Unexpected fetch: ${requestPath}`);
+    };
+
+    const moduleUrl = pathToFileURL(path.join(APP_ROOT, 'public/app.js'));
+    await import(`${moduleUrl.href}?frontend-test=${Date.now()}`);
+    await waitFor(() => dom.byId('save-state').textContent === 'Ready');
+
+    dom.byId('export-md').click();
+
+    await waitFor(() => dom.byId('save-state').textContent === 'Error');
+    assert.equal(dom.byId('output').value, 'Server returned an invalid export markdown.');
+    assert.doesNotMatch(dom.byId('output').value, /\[object Object\]|Should not stringify/);
+    assert.equal(clickedLinks.length, 0);
+    assert.equal(objectUrls.length, 0);
+  } finally {
+    console.error = originalConsoleError;
+  }
+});
+
 test('markdown export cancels pending autosave so rescue output is not overwritten', async () => {
   const dom = createDomHarness();
   const originalConsoleError = console.error;
@@ -446,6 +559,39 @@ test('snapshot cancels pending autosave so rescue status is not overwritten', as
     assert.equal(saveAttempts, 0);
     assert.equal(dom.byId('output').value, 'Snapshot saved: data/snapshots/project-rescue.json');
     assert.equal(dom.byId('save-state').textContent, 'Snapshot; Changed');
+  } finally {
+    console.error = originalConsoleError;
+  }
+});
+
+test('snapshot rejects malformed API filenames instead of showing fake paths', async () => {
+  const dom = createDomHarness();
+  const originalConsoleError = console.error;
+  const project = createDefaultProject();
+
+  try {
+    console.error = () => {};
+    globalThis.document = dom.document;
+    globalThis.window = dom.window;
+    globalThis.localStorage = createStorage();
+    globalThis.fetch = async (requestPath, options = {}) => {
+      if (requestPath === '/api/project') return jsonResponse(project);
+      if (requestPath === '/api/snapshot' && options.method === 'POST') {
+        return jsonResponse({ filename: { value: 'project-rescue.json' } });
+      }
+      throw new Error(`Unexpected fetch: ${requestPath}`);
+    };
+
+    const moduleUrl = pathToFileURL(path.join(APP_ROOT, 'public/app.js'));
+    await import(`${moduleUrl.href}?frontend-test=${Date.now()}`);
+    await waitFor(() => dom.byId('save-state').textContent === 'Ready');
+
+    dom.byId('snapshot').click();
+
+    await waitFor(() => dom.byId('save-state').textContent === 'Error');
+    assert.equal(dom.byId('output').value, 'Server returned an invalid snapshot filename.');
+    assert.doesNotMatch(dom.byId('output').value, /\[object Object\]/);
+    assert.doesNotMatch(dom.byId('output').value, /data\/snapshots\//);
   } finally {
     console.error = originalConsoleError;
   }
