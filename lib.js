@@ -509,6 +509,7 @@ export function analyzeDraftQuality(project, text = '', plan = '') {
 
 export function offlineRevise(text = '', audit = '') {
   if (!asString(text, '').trim()) return '原文为空，无法修订。';
+  const auditText = asString(audit, '');
   const replacements = [
     ['命运的齿轮开始转动', '门后的脚步声越来越近'],
     ['命运的齿轮', '正在逼近的后果'],
@@ -521,13 +522,13 @@ export function offlineRevise(text = '', audit = '') {
   ];
   let revised = asString(text, '').trim();
   for (const [from, to] of replacements) revised = revised.split(from).join(to);
-  if (/对白偏少|人物互动不足/.test(audit) && !/[“"][^”"\n]{2,}[”"]/.test(revised)) {
+  if (/对白偏少|人物互动不足/.test(auditText) && !/[“"][^”"\n]{2,}[”"]/.test(revised)) {
     revised += '\n\n“你到底隐瞒了什么？”\n\n对方没有立刻回答，这个停顿让新的问题变得更具体。';
   }
-  if (/结尾不完整/.test(audit) && !/[。！？.!?]\s*$/.test(revised)) {
+  if (/结尾不完整/.test(auditText) && !/[。！？.!?]\s*$/.test(revised)) {
     revised += '。';
   }
-  if (/未触碰开放伏笔/.test(audit)) {
+  if (/未触碰开放伏笔/.test(auditText)) {
     revised += '\n\n临走前，那个旧线索再次出现，只是这一次多了一个足以改变判断的细节。';
   }
   return revised;
@@ -693,29 +694,32 @@ export function applySettlement(project, chapterInput = {}) {
 }
 
 export function formatSettlement(settlement) {
+  const characterUpdates = Array.isArray(settlement?.characterUpdates) ? settlement.characterUpdates : [];
+  const hookUpdates = Array.isArray(settlement?.hookUpdates) ? settlement.hookUpdates : [];
+  const resourceUpdates = Array.isArray(settlement?.resourceUpdates) ? settlement.resourceUpdates : [];
   return [
     '# Chapter Settlement',
     '',
-    `Chapter: ${formatInlineText(settlement.title, '未命名章节')}`,
-    `Summary: ${formatInlineText(settlement.summary, '未提取到摘要')}`,
+    `Chapter: ${formatInlineText(settlement?.title, '未命名章节')}`,
+    `Summary: ${formatInlineText(settlement?.summary, '未提取到摘要')}`,
     '',
     '## Timeline',
-    `- ${formatInlineText(settlement.timelineEvent?.event, '未生成')}`,
-    `  Consequence: ${formatInlineText(settlement.timelineEvent?.consequence, '未生成')}`,
+    `- ${formatInlineText(settlement?.timelineEvent?.event, '未生成')}`,
+    `  Consequence: ${formatInlineText(settlement?.timelineEvent?.consequence, '未生成')}`,
     '',
     '## Character Updates',
-    ...(settlement.characterUpdates?.length
-      ? settlement.characterUpdates.map((item) => `- ${formatInlineText(item.name, '未命名')}: ${formatInlineText(item.knowledge, '未记录')}`)
+    ...(characterUpdates.length
+      ? characterUpdates.map((item) => `- ${formatInlineText(item?.name, '未命名')}: ${formatInlineText(item?.knowledge, '未记录')}`)
       : ['- 未识别到人物变化']),
     '',
     '## Hook Updates',
-    ...(settlement.hookUpdates?.length
-      ? settlement.hookUpdates.map((item) => `- ${formatInlineText(item.text, '未命名伏笔')}: ${formatInlineText(item.from, '未知')} -> ${formatInlineText(item.to, '未知')}`)
+    ...(hookUpdates.length
+      ? hookUpdates.map((item) => `- ${formatInlineText(item?.text, '未命名伏笔')}: ${formatInlineText(item?.from, '未知')} -> ${formatInlineText(item?.to, '未知')}`)
       : ['- 未识别到伏笔推进']),
     '',
     '## Resource Updates',
-    ...(settlement.resourceUpdates?.length
-      ? settlement.resourceUpdates.map((item) => `- ${formatInlineText(item.item, '未命名资源')}: ${formatInlineText(item.note, '未记录')}`)
+    ...(resourceUpdates.length
+      ? resourceUpdates.map((item) => `- ${formatInlineText(item?.item, '未命名资源')}: ${formatInlineText(item?.note, '未记录')}`)
       : ['- 未识别到资源变化'])
   ].join('\n');
 }
@@ -818,7 +822,7 @@ export function exportMarkdown(project) {
 }
 
 export function countTextLength(text = '', language = 'zh') {
-  const value = String(text || '').trim();
+  const value = asString(text, '').trim();
   if (!value) return 0;
   const cjk = (value.match(/[\u4e00-\u9fff]/g) || []).length;
   const latinWords = (value.replace(/[\u4e00-\u9fff]/g, ' ').match(/[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)*/g) || []).length;
@@ -1035,7 +1039,7 @@ function resolvePriorChapter(project, chapterNumber) {
 }
 
 function summarizeText(text = '', language = 'zh') {
-  const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+  const normalized = asString(text, '').replace(/\s+/g, ' ').trim();
   if (!normalized) return '';
   const pattern = language === 'zh'
     ? /[^。！？!?]+[。！？!?]["”’]?/g
@@ -1060,7 +1064,7 @@ function hookTouched(text, hookText = '') {
 }
 
 function splitSentences(text = '') {
-  return String(text || '')
+  return asString(text, '')
     .replace(/([。！？.!?]["”’]?)/g, '$1\n')
     .split(/\n+/)
     .map((item) => item.trim())
@@ -1068,7 +1072,7 @@ function splitSentences(text = '') {
 }
 
 function extractKeywords(text = '') {
-  const value = String(text || '');
+  const value = asString(text, '');
   if (hasCjk(value)) {
     const cjk = value.match(/[\u4e00-\u9fff]{2,}/g) || [];
     const chunks = [];
@@ -1137,7 +1141,7 @@ function pickSetting(genre = '', hookText = '') {
 }
 
 function parseBannedPatterns(text = '') {
-  return String(text || '')
+  return asString(text, '')
     .split(/[、,，\n]+/)
     .map((item) => item.trim())
     .filter(Boolean);
@@ -1149,6 +1153,7 @@ function hasCjk(text = '') {
 
 function asString(value, fallback = '') {
   if (value === undefined || value === null) return fallback;
+  if (!isProjectTextValue(value)) return fallback;
   return String(value);
 }
 

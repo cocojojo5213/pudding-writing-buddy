@@ -508,6 +508,50 @@ test('exported offline helpers tolerate sparse projects and non-string text', ()
   assert.throws(() => applySettlement({}, null), /without body text/);
 });
 
+test('exported text helpers reject malformed direct text inputs', () => {
+  const project = normalizeProject(createDefaultProject());
+  const malformedValues = [{ text: '命运的齿轮' }, ['林澈', '许闻'], true, false];
+
+  for (const value of malformedValues) {
+    assert.equal(countTextLength(value, 'zh'), 0);
+    assert.equal(analyzeDraftQuality(project, value, value).length, 0);
+    assert.equal(analyzeDraftQuality(project, '林澈推开门。', value).planKeywords.length, 0);
+    assert.equal(analyzeStyle(value), '没有文本可分析。');
+    assert.equal(offlineRevise(value, '结尾不完整'), '原文为空，无法修订。');
+  }
+
+  const audit = offlineAudit(project, ['命运的齿轮开始转动。'], null);
+  assert.match(audit, /正文为空/);
+  assert.doesNotMatch(audit, /AI 腔/);
+  assert.equal(offlineRevise('门开了', ['结尾不完整']), '门开了');
+});
+
+test('settlement report tolerates missing or malformed generated fields', () => {
+  const emptyReport = formatSettlement(undefined);
+  assert.match(emptyReport, /^Chapter: 未命名章节$/m);
+  assert.match(emptyReport, /^- 未生成$/m);
+
+  const malformedReport = formatSettlement({
+    title: { nested: 'bad title' },
+    summary: ['bad summary'],
+    timelineEvent: {
+      event: { nested: 'bad event' },
+      consequence: ['bad consequence']
+    },
+    characterUpdates: [{ name: ['bad character'], knowledge: { nested: 'bad knowledge' } }],
+    hookUpdates: [{ text: { nested: 'bad hook' }, from: true, to: ['bad status'] }],
+    resourceUpdates: [{ item: false, note: { nested: 'bad resource' } }]
+  });
+
+  assert.match(malformedReport, /^Chapter: 未命名章节$/m);
+  assert.match(malformedReport, /^Summary: 未提取到摘要$/m);
+  assert.match(malformedReport, /^- 未生成$/m);
+  assert.match(malformedReport, /^- 未命名: 未记录$/m);
+  assert.match(malformedReport, /^- 未命名伏笔: 未知 -> 未知$/m);
+  assert.match(malformedReport, /^- 未命名资源: 未记录$/m);
+  assert.doesNotMatch(malformedReport, /\[object Object\]|bad title|bad summary|bad event|bad character|bad hook|bad resource/);
+});
+
 test('settlement applies chapter summary and truth-file updates', () => {
   const project = normalizeProject({
     ...createDefaultProject(),

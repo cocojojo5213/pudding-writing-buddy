@@ -162,23 +162,25 @@ rg "String\(|JSON\.parse|writeFile|rename|versionToken|localStorage|innerHTML|fe
 
 ## 当前停止点
 
-截至这份手册，分支是 `main`，远端已配置。最近一次已推送提交是：
-
-```text
-a0f7037 Harden model numeric config coercion
-```
-
-当前还有一份未提交的 `lib.js` 改动，来自进行中的硬化审计。它尚未验证，不要直接推送。已知后续点：
-
-- `formatSettlement(undefined)` 还需要给 `settlement?.timelineEvent` 补完整 optional chaining。
-- `offlineRevise` 的 audit 处理需要检查是否还在对 object/array/boolean 做原始正则匹配，应统一走文本归一化。
-- 给直接传入的异常文本值补回归测试，避免 object/array/boolean 变成 `[object Object]` 或逗号拼接的假正文。
-- 完成补丁后重新运行 `npm test`、所有 `node --check ...` 和 `git diff --check`。
-
-明天继续前先看：
+分支是 `main`，远端已配置。继续维护前先确认：
 
 ```bash
-git diff -- lib.js
+git status --short --branch
+git log --oneline -3
+```
+
+上一轮记录的 `lib.js` 未完成点已经处理并验证：
+
+- `formatSettlement(undefined)` 不再因为 `timelineEvent` 空值崩溃。
+- `offlineRevise` 的 audit 输入统一走文本归一化。
+- 直接传入 object/array/boolean 的文本 helper 已有回归测试，避免生成 `[object Object]` 或假正文。
+- 当前完整测试为 92 个通过。
+
+下次继续逐行审计前先看：
+
+```bash
+git status --short --branch
+git diff
 ```
 
 ## 故障恢复
